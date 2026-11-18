@@ -1,0 +1,56 @@
+# Air configuration for hot reload
+# https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Binary name
+  bin = "./tmp/main"
+  # Custom build command
+  cmd = "go build -o ./tmp/main ./cmd/api"
+  # Watch these file extensions
+  include_ext = ["go", "tpl", "tmpl", "html", "yaml", "yml", "sql", "json"]
+  # Ignore these directories
+  exclude_dir = ["assets", "tmp", "vendor", "node_modules", ".git", "migrations"]
+  # Include these directories
+  include_dir = ["internal", "pkg", "cmd"]
+  # Exclude files
+  exclude_file = []
+  # Exclude unchanged files
+  exclude_unchanged = true
+  # Follow symlinks
+  follow_symlink = true
+  # Build delay
+  delay = 1000
+  # Stop on error
+  stop_on_error = true
+  # Send interrupt signal before killing
+  send_interrupt = false
+  # Kill delay
+  kill_delay = 500
+
+[log]
+  # Log file
+  file = "./tmp/air.log"
+  # Log time format
+  time_format = "2006-01-02 15:04:05"
+  # Show log time
+  show_time = true
+  # Log level
+  level = "info"
+
+[color]
+  # Customize colors
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+  watcher = "cyan"
+  app = "blue"
+
+[misc]
+  # Clean tmp dir on exit
+  clean_on_exit = true
+  # Run as daemon
+  daemon = false
