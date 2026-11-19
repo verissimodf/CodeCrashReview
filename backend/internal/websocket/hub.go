@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"github.com/gin-gonic/gin"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,13 +29,13 @@ type Hub struct {
 }
 
 type Client struct {
-	ID       uuid.UUID
-	UserID   uuid.UUID
-	Username string
-	MatchID  uuid.UUID
-	Conn     *websocket.Conn
-	Send     chan []byte
-	Hub      *Hub
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	Username    string
+	MatchID     uuid.UUID
+	Conn        *websocket.Conn
+	Send        chan []byte
+	Hub         *Hub
 	IsSpectator bool
 }
 
@@ -89,7 +90,7 @@ func (h *Hub) SetMatchRepository(repo *database.MatchRepository) {
 
 func (h *Hub) Run() {
 	// Subscribe to Redis channels for cross-instance messaging
-	pubsub := h.redis.Subscribe(context.Background(), "ws:broadcast", "ws:match:*")
+	pubsub := h.redis.PSubscribe(context.Background(), "ws:broadcast", "ws:match:*")
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
@@ -107,21 +108,25 @@ func (h *Hub) handleRedisMessage(channel, payload string) {
 	}
 
 	// Route to appropriate match room
-	if matchID, err := uuid.Parse(msg.Payload); err == nil {
+	if channel == "ws:broadcast" {
+		h.BroadcastToAll(msg)
+		return
+	}
+	if matchID, err := uuid.Parse(strings.TrimPrefix(channel, "ws:match:")); err == nil {
 		h.broadcastToMatch(matchID, msg, nil)
 	}
 }
 
 func (h *Hub) HandleWebSocket(conn *websocket.Conn, userID uuid.UUID, username string, matchID uuid.UUID, isSpectator bool) {
 	client := &Client{
-		ID:            uuid.New(),
-		UserID:        userID,
-		Username:      username,
-		MatchID:       matchID,
-		Conn:          conn,
-		Send:          make(chan []byte, 256),
-		Hub:           h,
-		IsSpectator:   isSpectator,
+		ID:          uuid.New(),
+		UserID:      userID,
+		Username:    username,
+		MatchID:     matchID,
+		Conn:        conn,
+		Send:        make(chan []byte, 256),
+		Hub:         h,
+		IsSpectator: isSpectator,
 	}
 
 	h.registerClient(client)
@@ -139,7 +144,7 @@ func (h *Hub) registerClient(client *Client) {
 	if _, ok := h.rooms[client.MatchID]; !ok {
 		h.rooms[client.MatchID] = make(map[uuid.UUID]*Client)
 	}
-	h.rooms[client.MatchID][client.UserID] = client
+	h.rooms[client.MatchID][client.ID] = client
 
 	h.logger.Info().
 		Str("client_id", client.ID.String()).
@@ -156,7 +161,7 @@ func (h *Hub) unregisterClient(client *Client) {
 	delete(h.clients, client.ID)
 
 	if room, ok := h.rooms[client.MatchID]; ok {
-		delete(room, client.UserID)
+		delete(room, client.ID)
 		if len(room) == 0 {
 			delete(h.rooms, client.MatchID)
 		}
@@ -191,7 +196,7 @@ func (h *Hub) broadcastToMatch(matchID uuid.UUID, msg WSMessage, exclude *Client
 			case client.Send <- data:
 			default:
 				// Client buffer full, disconnect
-				go h.unregisterClient(client)
+				client.Conn.Close()
 			}
 		}
 	}
@@ -210,7 +215,7 @@ func (h *Hub) BroadcastToAll(msg WSMessage) {
 		select {
 		case client.Send <- data:
 		default:
-			go h.unregisterClient(client)
+			client.Conn.Close()
 		}
 	}
 }
@@ -225,7 +230,7 @@ func (h *Hub) SendToUser(userID uuid.UUID, msg WSMessage) {
 			select {
 			case client.Send <- data:
 			default:
-				go h.unregisterClient(client)
+				client.Conn.Close()
 			}
 		}
 	}
@@ -300,7 +305,7 @@ func (h *Hub) BroadcastMatchEnd(matchID uuid.UUID, result map[string]interface{}
 
 func (h *Hub) BroadcastMatchState(matchID uuid.UUID, match *database.Match, participants []*database.MatchParticipant, yourParticipantID *uuid.UUID) {
 	payload := map[string]interface{}{
-		"match":      match,
+		"match":        match,
 		"participants": participants,
 	}
 	if yourParticipantID != nil {
@@ -380,13 +385,6 @@ func (c *Client) writePump() {
 			}
 			w.Write(data)
 
-			// Add queued messages
-			n := len(c.Send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte("\n"))
-				w.Write(<-c.Send)
-			}
-
 			if err := w.Close(); err != nil {
 				return
 			}
@@ -435,8 +433,8 @@ func (c *Client) sendPong(sequence int64) {
 
 func (c *Client) handleJoinMatch(msg WSMessage) {
 	var payload struct {
-		MatchID      string `json:"match_id"`
-		AsSpectator  bool   `json:"as_spectator"`
+		MatchID     string `json:"match_id"`
+		AsSpectator bool   `json:"as_spectator"`
 	}
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		return
@@ -447,35 +445,43 @@ func (c *Client) handleJoinMatch(msg WSMessage) {
 		return
 	}
 
+	match, participants, ok := c.Hub.roomState(context.Background(), matchID, c.UserID, payload.AsSpectator)
+	if !ok {
+		return
+	}
+	h := c.Hub
+	h.mu.Lock()
+	delete(h.rooms[c.MatchID], c.ID)
+	if len(h.rooms[c.MatchID]) == 0 {
+		delete(h.rooms, c.MatchID)
+	}
 	c.MatchID = matchID
 	c.IsSpectator = payload.AsSpectator
-
-	// Re-register in new room
-	c.Hub.unregisterClient(c)
-	c.Hub.registerClient(c)
-
-	// Send current match state
-	if c.Hub.matchRepo != nil {
-		if match, err := c.Hub.matchRepo.GetByID(context.Background(), matchID); err == nil {
-			participants, _ := c.Hub.matchRepo.GetParticipants(context.Background(), matchID)
-			c.sendMatchState(match, participants)
-		}
+	if h.rooms[matchID] == nil {
+		h.rooms[matchID] = map[uuid.UUID]*Client{}
 	}
+	h.rooms[matchID][c.ID] = c
+	h.mu.Unlock()
+	c.sendMatchState(match, participants)
 }
 
 func (c *Client) handleAgentAction(msg WSMessage) {
 	// Forward to match room
-	c.Hub.broadcastToMatch(c.MatchID, msg, c)
+	if !c.IsSpectator && c.MatchID != uuid.Nil {
+		c.Hub.broadcastToMatch(c.MatchID, msg, c)
+	}
 }
 
 func (c *Client) handleSubmission(msg WSMessage) {
 	// Forward to match room
-	c.Hub.broadcastToMatch(c.MatchID, msg, c)
+	if !c.IsSpectator && c.MatchID != uuid.Nil {
+		c.Hub.broadcastToMatch(c.MatchID, msg, c)
+	}
 }
 
 func (c *Client) sendMatchState(match *database.Match, participants []*database.MatchParticipant) {
 	payload := map[string]interface{}{
-		"match":      match,
+		"match":        match,
 		"participants": participants,
 	}
 	payloadBytes, _ := json.Marshal(payload)
@@ -490,4 +496,51 @@ func (c *Client) sendMatchState(match *database.Match, participants []*database.
 	case c.Send <- data:
 	default:
 	}
+}
+
+func (h *Hub) roomState(ctx context.Context, id, user uuid.UUID, spectator bool) (*database.Match, []*database.MatchParticipant, bool) {
+	match, err := h.matchRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, nil, false
+	}
+	people, err := h.matchRepo.GetParticipants(ctx, id)
+	if err != nil {
+		return nil, nil, false
+	}
+	for _, p := range people {
+		if p.UserID == user {
+			return match, people, true
+		}
+	}
+	return match, people, spectator && match.Mode != "private"
+}
+func (h *Hub) ServeHTTP(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		token = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	}
+	claims, err := h.authSvc.ValidateAccessToken(token)
+	if err != nil {
+		c.JSON(401, gin.H{"error": "Invalid access token"})
+		return
+	}
+	var id uuid.UUID
+	spectator := c.Query("spectator") == "true"
+	if v := c.Query("match"); v != "" {
+		id, err = uuid.Parse(v)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid match"})
+			return
+		}
+		if _, _, ok := h.roomState(c.Request.Context(), id, claims.UserID, spectator); !ok {
+			c.JSON(403, gin.H{"error": "Match access denied"})
+			return
+		}
+	}
+	upgrader := websocket.Upgrader{}
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	h.HandleWebSocket(conn, claims.UserID, claims.Username, id, spectator)
 }

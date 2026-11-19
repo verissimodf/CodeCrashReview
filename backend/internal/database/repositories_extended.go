@@ -3,11 +3,8 @@ package database
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -154,7 +151,7 @@ func (r *SnippetCollectionRepository) List(ctx context.Context, tags []string) (
 	var collections []*SnippetCollection
 	for rows.Next() {
 		c := &SnippetCollection{}
-		var snippetIDs, tags pgtype.TextArray
+		var snippetIDs, tags []string
 
 		err := rows.Scan(
 			&c.ID, &c.Name, &c.Description,
@@ -164,8 +161,8 @@ func (r *SnippetCollectionRepository) List(ctx context.Context, tags []string) (
 			return nil, err
 		}
 
-		c.SnippetIDs = snippetIDs.Elements
-		c.Tags = tags.Elements
+		c.SnippetIDs = snippetIDs
+		c.Tags = tags
 		collections = append(collections, c)
 	}
 	return collections, nil

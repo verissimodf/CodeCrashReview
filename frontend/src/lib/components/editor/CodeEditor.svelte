@@ -212,7 +212,7 @@
 		}
 	}
 
-	function toggle onMount(() => {
+	onMount(() => {
 		initMonaco();
 	});
 
@@ -292,7 +292,6 @@
 
 	<!-- Editor Container -->
 	<div
-		bind:this="editor-editor"
 		bind:this={editorContainer}
 		style="height: calc(100% - 50px);"
 	/>

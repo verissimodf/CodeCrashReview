@@ -49,6 +49,8 @@ coverage/
 *.sqlite
 *.db
 *.sql
+!backend/migrations/*.sql
+!backend/internal/database/queries/*.sql
 
 # Secrets
 *.pem

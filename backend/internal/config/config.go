@@ -14,12 +14,12 @@ type Config struct {
 	RedisURL    string
 
 	// Auth
-	JWTSecret    string
-	JWTExpiry    time.Duration
-	Argon2Time   uint32
-	Argon2Memory uint32
+	JWTSecret     string
+	JWTExpiry     time.Duration
+	Argon2Time    uint32
+	Argon2Memory  uint32
 	Argon2Threads uint8
-	Argon2KeyLen uint32
+	Argon2KeyLen  uint32
 
 	// FreeLLM-Local
 	FreeLLMBaseURL string
@@ -27,27 +27,27 @@ type Config struct {
 	DefaultModel   string
 
 	// Docker/Sandbox
-	DockerHost          string
-	SandboxNetwork      string
-	SandboxCPULimit     float64
-	SandboxMemoryLimit  string
-	SandboxPIDsLimit    int64
+	DockerHost            string
+	SandboxNetwork        string
+	SandboxCPULimit       float64
+	SandboxMemoryLimit    string
+	SandboxPIDsLimit      int64
 	SandboxSeccompProfile string
 
 	// Matchmaking
-	EloKFactor         float64
-	GlickoTau          float64
-	MatchTimeoutSeconds int
+	EloKFactor           float64
+	GlickoTau            float64
+	MatchTimeoutSeconds  int
 	QueueCheckIntervalMs int
-	MinRating          int
-	MaxRating          int
-	DefaultRating      int
-	MatchmakingRange   int
+	MinRating            int
+	MaxRating            int
+	DefaultRating        int
+	MatchmakingRange     int
 
 	// Server
-	GinMode         string
-	ServerHost      string
-	ServerPort      int
+	GinMode           string
+	ServerHost        string
+	ServerPort        int
 	RateLimitRequests int
 	RateLimitWindow   int
 
@@ -112,43 +112,43 @@ func Load() *Config {
 	_ = viper.ReadInConfig()
 
 	cfg := &Config{
-		DatabaseURL:            getEnv("DATABASE_URL", viper.GetString("database_url")),
-		RedisURL:               getEnv("REDIS_URL", viper.GetString("redis_url")),
-		JWTSecret:              getEnv("JWT_SECRET", viper.GetString("jwt_secret")),
-		JWTExpiry:              parseDuration(getEnv("JWT_EXPIRY", viper.GetString("jwt_expiry"))),
-		Argon2Time:             uint32(getEnvInt("ARGON2_TIME", viper.GetInt("argon2_time"))),
-		Argon2Memory:           uint32(getEnvInt("ARGON2_MEMORY", viper.GetInt("argon2_memory"))),
-		Argon2Threads:          uint8(getEnvInt("ARGON2_THREADS", viper.GetInt("argon2_threads"))),
-		Argon2KeyLen:           uint32(getEnvInt("ARGON2_KEYLEN", viper.GetInt("argon2_keylen"))),
-		FreeLLMBaseURL:         getEnv("FREELLM_BASE_URL", viper.GetString("freellm_base_url")),
-		FreeLLMAPIKey:          getEnv("FREELLM_API_KEY", viper.GetString("freellm_api_key")),
-		DefaultModel:           getEnv("DEFAULT_MODEL", viper.GetString("default_model")),
-		DockerHost:             getEnv("DOCKER_HOST", viper.GetString("docker_host")),
-		SandboxNetwork:         getEnv("SANDBOX_NETWORK", viper.GetString("sandbox_network")),
-		SandboxCPULimit:        getEnvFloat("SANDBOX_CPU_LIMIT", viper.GetFloat64("sandbox_cpu_limit")),
-		SandboxMemoryLimit:     getEnv("SANDBOX_MEMORY_LIMIT", viper.GetString("sandbox_memory_limit")),
-		SandboxPIDsLimit:       int64(getEnvInt("SANDBOX_PIDS_LIMIT", viper.GetInt("sandbox_pids_limit"))),
-		SandboxSeccompProfile:  getEnv("SANDBOX_SECCOMP_PROFILE", viper.GetString("sandbox_seccomp_profile")),
-		EloKFactor:             getEnvFloat("ELO_K_FACTOR", viper.GetFloat64("elo_k_factor")),
-		GlickoTau:              getEnvFloat("GLICKO_TAU", viper.GetFloat64("glicko_tau")),
-		MatchTimeoutSeconds:    getEnvInt("MATCH_TIMEOUT_SECONDS", viper.GetInt("match_timeout_seconds")),
-		QueueCheckIntervalMs:   getEnvInt("QUEUE_CHECK_INTERVAL_MS", viper.GetInt("queue_check_interval_ms")),
-		MinRating:              getEnvInt("MIN_RATING", viper.GetInt("min_rating")),
-		MaxRating:              getEnvInt("MAX_RATING", viper.GetInt("max_rating")),
-		DefaultRating:          getEnvInt("DEFAULT_RATING", viper.GetInt("default_rating")),
-		MatchmakingRange:       getEnvInt("MATCHMAKING_RANGE", viper.GetInt("matchmaking_range")),
-		GinMode:                getEnv("GIN_MODE", viper.GetString("gin_mode")),
-		ServerHost:             getEnv("SERVER_HOST", viper.GetString("server_host")),
-		ServerPort:             getEnvInt("SERVER_PORT", viper.GetInt("server_port")),
-		RateLimitRequests:      getEnvInt("RATE_LIMIT_REQUESTS", viper.GetInt("rate_limit_requests")),
-		RateLimitWindow:        getEnvInt("RATE_LIMIT_WINDOW", viper.GetInt("rate_limit_window")),
-		LogLevel:               getEnv("LOG_LEVEL", viper.GetString("log_level")),
-		LogFormat:              getEnv("LOG_FORMAT", viper.GetString("log_format")),
-		EnableSpectatorMode:    getEnvBool("ENABLE_SPECTATOR_MODE", viper.GetBool("enable_spectator_mode")),
-		EnableReplaySystem:     getEnvBool("ENABLE_REPLAY_SYSTEM", viper.GetBool("enable_replay_system")),
+		DatabaseURL:              getEnv("DATABASE_URL", viper.GetString("database_url")),
+		RedisURL:                 getEnv("REDIS_URL", viper.GetString("redis_url")),
+		JWTSecret:                getEnv("JWT_SECRET", viper.GetString("jwt_secret")),
+		JWTExpiry:                parseDuration(getEnv("JWT_EXPIRY", viper.GetString("jwt_expiry"))),
+		Argon2Time:               uint32(getEnvInt("ARGON2_TIME", viper.GetInt("argon2_time"))),
+		Argon2Memory:             uint32(getEnvInt("ARGON2_MEMORY", viper.GetInt("argon2_memory"))),
+		Argon2Threads:            uint8(getEnvInt("ARGON2_THREADS", viper.GetInt("argon2_threads"))),
+		Argon2KeyLen:             uint32(getEnvInt("ARGON2_KEYLEN", viper.GetInt("argon2_keylen"))),
+		FreeLLMBaseURL:           getEnv("FREELLM_BASE_URL", viper.GetString("freellm_base_url")),
+		FreeLLMAPIKey:            getEnv("FREELLM_API_KEY", viper.GetString("freellm_api_key")),
+		DefaultModel:             getEnv("DEFAULT_MODEL", viper.GetString("default_model")),
+		DockerHost:               getEnv("DOCKER_HOST", viper.GetString("docker_host")),
+		SandboxNetwork:           getEnv("SANDBOX_NETWORK", viper.GetString("sandbox_network")),
+		SandboxCPULimit:          getEnvFloat("SANDBOX_CPU_LIMIT", viper.GetFloat64("sandbox_cpu_limit")),
+		SandboxMemoryLimit:       getEnv("SANDBOX_MEMORY_LIMIT", viper.GetString("sandbox_memory_limit")),
+		SandboxPIDsLimit:         int64(getEnvInt("SANDBOX_PIDS_LIMIT", viper.GetInt("sandbox_pids_limit"))),
+		SandboxSeccompProfile:    getEnv("SANDBOX_SECCOMP_PROFILE", viper.GetString("sandbox_seccomp_profile")),
+		EloKFactor:               getEnvFloat("ELO_K_FACTOR", viper.GetFloat64("elo_k_factor")),
+		GlickoTau:                getEnvFloat("GLICKO_TAU", viper.GetFloat64("glicko_tau")),
+		MatchTimeoutSeconds:      getEnvInt("MATCH_TIMEOUT_SECONDS", viper.GetInt("match_timeout_seconds")),
+		QueueCheckIntervalMs:     getEnvInt("QUEUE_CHECK_INTERVAL_MS", viper.GetInt("queue_check_interval_ms")),
+		MinRating:                getEnvInt("MIN_RATING", viper.GetInt("min_rating")),
+		MaxRating:                getEnvInt("MAX_RATING", viper.GetInt("max_rating")),
+		DefaultRating:            getEnvInt("DEFAULT_RATING", viper.GetInt("default_rating")),
+		MatchmakingRange:         getEnvInt("MATCHMAKING_RANGE", viper.GetInt("matchmaking_range")),
+		GinMode:                  getEnv("GIN_MODE", viper.GetString("gin_mode")),
+		ServerHost:               getEnv("SERVER_HOST", viper.GetString("server_host")),
+		ServerPort:               getEnvInt("SERVER_PORT", viper.GetInt("server_port")),
+		RateLimitRequests:        getEnvInt("RATE_LIMIT_REQUESTS", viper.GetInt("rate_limit_requests")),
+		RateLimitWindow:          getEnvInt("RATE_LIMIT_WINDOW", viper.GetInt("rate_limit_window")),
+		LogLevel:                 getEnv("LOG_LEVEL", viper.GetString("log_level")),
+		LogFormat:                getEnv("LOG_FORMAT", viper.GetString("log_format")),
+		EnableSpectatorMode:      getEnvBool("ENABLE_SPECTATOR_MODE", viper.GetBool("enable_spectator_mode")),
+		EnableReplaySystem:       getEnvBool("ENABLE_REPLAY_SYSTEM", viper.GetBool("enable_replay_system")),
 		EnableChallengeTemplates: getEnvBool("ENABLE_CHALLENGE_TEMPLATES", viper.GetBool("enable_challenge_templates")),
-		EnableSnippetImport:    getEnvBool("ENABLE_SNIPPET_IMPORT", viper.GetBool("enable_snippet_import")),
-		EnableAgentAnalytics:   getEnvBool("ENABLE_AGENT_ANALYTICS", viper.GetBool("enable_agent_analytics")),
+		EnableSnippetImport:      getEnvBool("ENABLE_SNIPPET_IMPORT", viper.GetBool("enable_snippet_import")),
+		EnableAgentAnalytics:     getEnvBool("ENABLE_AGENT_ANALYTICS", viper.GetBool("enable_agent_analytics")),
 	}
 
 	return cfg

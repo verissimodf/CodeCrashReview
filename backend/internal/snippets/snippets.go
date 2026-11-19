@@ -2,12 +2,9 @@ package snippets
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log"
+
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -19,10 +16,10 @@ import (
 )
 
 type Service struct {
-	snippetRepo   *database.SnippetRepository
+	snippetRepo    *database.SnippetRepository
 	collectionRepo *database.SnippetCollectionRepository
-	pool          *pgxpool.Pool
-	logger        zerolog.Logger
+	pool           *pgxpool.Pool
+	logger         zerolog.Logger
 }
 
 func NewService(snippetRepo *database.SnippetRepository, collectionRepo *database.SnippetCollectionRepository, pool *pgxpool.Pool) *Service {
@@ -30,7 +27,7 @@ func NewService(snippetRepo *database.SnippetRepository, collectionRepo *databas
 		snippetRepo:    snippetRepo,
 		collectionRepo: collectionRepo,
 		pool:           pool,
-		logger:         zerolog.DefaultContextLogger,
+		logger:         *zerolog.Ctx(context.Background()),
 	}
 }
 
@@ -91,10 +88,10 @@ func (s *Service) ListSnippets(c *gin.Context) {
 		"success": true,
 		"data":    snippets,
 		"meta": gin.H{
-			"page":         0, // simplified
-			"per_page":     limit,
-			"total":        count,
-			"total_pages":  (count + limit - 1) / limit,
+			"page":        offset/limit + 1,
+			"per_page":    limit,
+			"total":       count,
+			"total_pages": (count + limit - 1) / limit,
 		},
 	})
 }
@@ -141,6 +138,7 @@ func (s *Service) CreateSnippet(c *gin.Context) {
 		return
 	}
 
+	owner := userID.(uuid.UUID)
 	snippet := &database.Snippet{
 		Title:       req.Title,
 		Description: req.Description,
@@ -149,12 +147,12 @@ func (s *Service) CreateSnippet(c *gin.Context) {
 		Tags:        req.Tags,
 		Complexity:  req.Complexity,
 		Author:      req.Author,
-		AuthorID:    &userID,
+		AuthorID:    &owner,
 		SourceURL:   req.SourceURL,
 		IsOfficial:  false,
 	}
 
-	if err := s.snippetRepo.Create(context.Background(), snippet); err != nil {
+	if err := s.snippetRepo.Create(c.Request.Context(), snippet); err != nil {
 		s.logger.Error().Err(err).Msg("Failed to create snippet")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create snippet"})
 		return
@@ -170,15 +168,8 @@ func (s *Service) ImportSnippets(c *gin.Context) {
 		return
 	}
 
-	// This would trigger the snippet import job
-	// For now, return a placeholder response
-	s.logger.Info().Str("source", req.Source).Msg("Snippet import requested")
+	c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Source importer unavailable"})
 
-	c.JSON(http.StatusAccepted, gin.H{
-		"success": true,
-		"message": "Import job started",
-		"job_id":  uuid.New().String(),
-	})
 }
 
 func (s *Service) UpdateSnippet(c *gin.Context) {
@@ -212,7 +203,7 @@ func (s *Service) UpdateSnippet(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	if snippet.AuthorID != nil && *snippet.AuthorID != userID.(uuid.UUID) && !snippet.IsOfficial {
+	if snippet.AuthorID == nil || *snippet.AuthorID != userID.(uuid.UUID) || snippet.IsOfficial {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Not authorized to update this snippet"})
 		return
 	}
@@ -243,7 +234,8 @@ func (s *Service) UpdateSnippet(c *gin.Context) {
 		snippet.Rating = *req.Rating
 	}
 	if req.IsOfficial != nil {
-		snippet.IsOfficial = *req.IsOfficial
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot change official status"})
+		return
 	}
 
 	if err := s.snippetRepo.Update(c.Request.Context(), snippet); err != nil {
@@ -280,7 +272,7 @@ func (s *Service) DeleteSnippet(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	if snippet.AuthorID != nil && *snippet.AuthorID != userID.(uuid.UUID) && !snippet.IsOfficial {
+	if snippet.AuthorID == nil || *snippet.AuthorID != userID.(uuid.UUID) || snippet.IsOfficial {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Not authorized to delete this snippet"})
 		return
 	}
@@ -308,15 +300,15 @@ type CreateSnippetRequest struct {
 }
 
 type UpdateSnippetRequest struct {
-	Title       *string  `json:"title"`
-	Description *string  `json:"description"`
-	Language    *string  `json:"language"`
-	Code        *string  `json:"code"`
+	Title       *string   `json:"title"`
+	Description *string   `json:"description"`
+	Language    *string   `json:"language"`
+	Code        *string   `json:"code"`
 	Tags        *[]string `json:"tags"`
-	Complexity  *string  `json:"complexity"`
-	SourceURL   *string  `json:"source_url"`
-	Rating      *float64 `json:"rating"`
-	IsOfficial  *bool    `json:"is_official"`
+	Complexity  *string   `json:"complexity"`
+	SourceURL   *string   `json:"source_url"`
+	Rating      *float64  `json:"rating"`
+	IsOfficial  *bool     `json:"is_official"`
 }
 
 type ImportSnippetsRequest struct {

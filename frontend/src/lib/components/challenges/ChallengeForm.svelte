@@ -34,7 +34,7 @@
 	export let onCancel: () => void;
 	export let loading = false;
 
-	let activeTab = 0;
+	let activeTab = 'basic';
 	const tabs = [
 		{ value: 'basic', label: 'Básico', icon: 'FileText' },
 		{ value: 'criteria', label: 'Critérios', icon: 'CheckSquare' },
@@ -275,6 +275,7 @@
 					bind:value={challenge.target_paths[0]}
 					required
 				/>
+            </Card>
 			{/if}
 
 			<!-- Criteria Tab -->
@@ -286,7 +287,7 @@
 							<Plus class="w-4 h-4 mr-1" />
 							Adicionar Critério
 						</Button>
-					</h3>
+					</div>
 
 					{#each challenge.acceptance_criteria as criterion, index}
 						<Card class="space-y-4">
@@ -414,7 +415,7 @@
 							<Plus class="w-4 h-4 mr-1" />
 							Adicionar Issue
 						</Button>
-					</h3>
+					</div>
 
 					{#each challenge.known_issues as issue, index}
 						<Card class="space-y-4">
@@ -537,6 +538,5 @@
 					</div>
 				</Card>
 			{/if}
-		</div>
 	</div>
 </div>

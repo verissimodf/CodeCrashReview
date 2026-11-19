@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // UserRepository handles user database operations
@@ -123,9 +121,15 @@ func (r *UserRepository) IncrementMatchStats(ctx context.Context, userID uuid.UU
 		WHERE id = $1
 	`
 	winInt, lossInt, drawInt := 0, 0, 0
-	if win { winInt = 1 }
-	if loss { lossInt = 1 }
-	if draw { drawInt = 1 }
+	if win {
+		winInt = 1
+	}
+	if loss {
+		lossInt = 1
+	}
+	if draw {
+		drawInt = 1
+	}
 
 	_, err := r.pool.Exec(ctx, query, userID, winInt, lossInt, drawInt)
 	return err
@@ -307,10 +311,10 @@ func (r *ChallengeRepository) Create(ctx context.Context, challenge *Challenge) 
 	scoringWeightsJSON, _ := json.Marshal(challenge.ScoringWeights)
 	knownIssuesJSON, _ := json.Marshal(challenge.KnownIssues)
 
-	var targetPaths, excludePaths, tags pgtype.TextArray
-	targetPaths.Set(challenge.TargetPaths)
-	excludePaths.Set(challenge.ExcludePaths)
-	tags.Set(challenge.Tags)
+	var targetPaths, excludePaths, tags []string
+	targetPaths = challenge.TargetPaths
+	excludePaths = append([]string{}, challenge.ExcludePaths...)
+	tags = append([]string{}, challenge.Tags...)
 
 	return r.pool.QueryRow(ctx, query,
 		challenge.Title, challenge.Description, challenge.RepositoryURL, challenge.RepositoryBranch,
@@ -325,7 +329,7 @@ func (r *ChallengeRepository) GetByID(ctx context.Context, id uuid.UUID) (*Chall
 	query := `SELECT id, title, description, repository_url, repository_branch, target_paths, exclude_paths, severity, category, time_limit_seconds, max_turns, acceptance_criteria, scoring_weights, known_issues, tags, template_id, is_public, created_by, play_count, average_rating, created_at, updated_at FROM challenges WHERE id = $1`
 	challenge := &Challenge{}
 	var acceptanceCriteria, scoringWeights, knownIssues []byte
-	var targetPaths, excludePaths, tags pgtype.TextArray
+	var targetPaths, excludePaths, tags []string
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&challenge.ID, &challenge.Title, &challenge.Description, &challenge.RepositoryURL, &challenge.RepositoryBranch,
@@ -339,19 +343,19 @@ func (r *ChallengeRepository) GetByID(ctx context.Context, id uuid.UUID) (*Chall
 		return nil, err
 	}
 
-	challenge.TargetPaths = targetPaths.Elements
-	challenge.ExcludePaths = excludePaths.Elements
-	challenge.Tags = tags.Elements
+	challenge.TargetPaths = targetPaths
+	challenge.ExcludePaths = excludePaths
+	challenge.Tags = tags
 	json.Unmarshal(acceptanceCriteria, &challenge.AcceptanceCriteria)
 	json.Unmarshal(scoringWeights, &challenge.ScoringWeights)
 	json.Unmarshal(knownIssues, &challenge.KnownIssues)
 	return challenge, nil
 }
 
-func (r *ChallengeRepository) List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*Challenge, error) {
-	query := `SELECT id, title, description, repository_url, repository_branch, target_paths, exclude_paths, severity, category, time_limit_seconds, max_turns, acceptance_criteria, scoring_weights, known_issues, tags, template_id, is_public, created_by, play_count, average_rating, created_at, updated_at FROM challenges WHERE is_public = true`
-	args := []interface{}{}
-	argCount := 1
+func challengeFilter(filters map[string]interface{}) (string, []any) {
+	query := ` FROM challenges WHERE (is_public OR created_by = $1)`
+	args := []interface{}{filters["owner"]}
+	argCount := 2
 
 	if category, ok := filters["category"].(string); ok && category != "" {
 		query += fmt.Sprintf(" AND category = $%d", argCount)
@@ -368,7 +372,27 @@ func (r *ChallengeRepository) List(ctx context.Context, filters map[string]inter
 		args = append(args, "%"+search+"%")
 		argCount++
 	}
-
+	if v, _ := filters["template_id"].(string); v != "" {
+		query += fmt.Sprintf(" AND template_id::text=$%d", argCount)
+		args = append(args, v)
+		argCount++
+	}
+	if v, _ := filters["language"].(string); v != "" {
+		query += fmt.Sprintf(" AND $%d=ANY(tags)", argCount)
+		args = append(args, v)
+	}
+	return query, args
+}
+func (r *ChallengeRepository) Count(ctx context.Context, filters map[string]interface{}) (int, error) {
+	where, args := challengeFilter(filters)
+	var total int
+	err := r.pool.QueryRow(ctx, "SELECT count(*) "+where, args...).Scan(&total)
+	return total, err
+}
+func (r *ChallengeRepository) List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*Challenge, error) {
+	query, args := challengeFilter(filters)
+	query = `SELECT id, title, description, repository_url, repository_branch, target_paths, exclude_paths, severity, category, time_limit_seconds, max_turns, acceptance_criteria, scoring_weights, known_issues, tags, template_id, is_public, created_by, play_count, average_rating, created_at, updated_at` + query
+	argCount := len(args) + 1
 	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argCount, argCount+1)
 	args = append(args, limit, offset)
 
@@ -378,11 +402,11 @@ func (r *ChallengeRepository) List(ctx context.Context, filters map[string]inter
 	}
 	defer rows.Close()
 
-	var challenges []*Challenge
+	challenges := make([]*Challenge, 0)
 	for rows.Next() {
 		c := &Challenge{}
 		var acceptanceCriteria, scoringWeights, knownIssues []byte
-		var targetPaths, excludePaths, tags pgtype.TextArray
+		var targetPaths, excludePaths, tags []string
 
 		err := rows.Scan(
 			&c.ID, &c.Title, &c.Description, &c.RepositoryURL, &c.RepositoryBranch,
@@ -396,15 +420,15 @@ func (r *ChallengeRepository) List(ctx context.Context, filters map[string]inter
 			return nil, err
 		}
 
-		c.TargetPaths = targetPaths.Elements
-		c.ExcludePaths = excludePaths.Elements
-		c.Tags = tags.Elements
+		c.TargetPaths = targetPaths
+		c.ExcludePaths = excludePaths
+		c.Tags = tags
 		json.Unmarshal(acceptanceCriteria, &c.AcceptanceCriteria)
 		json.Unmarshal(scoringWeights, &c.ScoringWeights)
 		json.Unmarshal(knownIssues, &c.KnownIssues)
 		challenges = append(challenges, c)
 	}
-	return challenges, nil
+	return challenges, rows.Err()
 }
 
 // SnippetRepository handles snippet operations
@@ -416,8 +440,8 @@ func NewSnippetRepository(pool *pgxpool.Pool) *SnippetRepository {
 	return &SnippetRepository{pool: pool}
 }
 
-func (r *SnippetRepository) List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*Snippet, error) {
-	query := `SELECT id, title, description, language, code, tags, complexity, author, author_id, source_url, rating, usage_count, is_official, created_at, updated_at FROM snippets WHERE 1=1`
+func snippetFilter(filters map[string]interface{}) (string, []any) {
+	query := ` FROM snippets WHERE 1=1`
 	args := []interface{}{}
 	argCount := 1
 
@@ -441,7 +465,18 @@ func (r *SnippetRepository) List(ctx context.Context, filters map[string]interfa
 		args = append(args, "%"+search+"%")
 		argCount++
 	}
-
+	return query, args
+}
+func (r *SnippetRepository) Count(ctx context.Context, filters map[string]interface{}) (int, error) {
+	where, args := snippetFilter(filters)
+	var total int
+	err := r.pool.QueryRow(ctx, "SELECT count(*) "+where, args...).Scan(&total)
+	return total, err
+}
+func (r *SnippetRepository) List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*Snippet, error) {
+	query, args := snippetFilter(filters)
+	query = `SELECT id, title, description, language, code, tags, complexity, author, author_id, source_url, rating, usage_count, is_official, created_at, updated_at` + query
+	argCount := len(args) + 1
 	query += fmt.Sprintf(" ORDER BY rating DESC, usage_count DESC LIMIT $%d OFFSET $%d", argCount, argCount+1)
 	args = append(args, limit, offset)
 
@@ -451,10 +486,10 @@ func (r *SnippetRepository) List(ctx context.Context, filters map[string]interfa
 	}
 	defer rows.Close()
 
-	var snippets []*Snippet
+	snippets := make([]*Snippet, 0)
 	for rows.Next() {
 		s := &Snippet{}
-		var tags pgtype.TextArray
+		var tags []string
 		err := rows.Scan(
 			&s.ID, &s.Title, &s.Description, &s.Language, &s.Code,
 			&tags, &s.Complexity, &s.Author, &s.AuthorID, &s.SourceURL,
@@ -463,8 +498,43 @@ func (r *SnippetRepository) List(ctx context.Context, filters map[string]interfa
 		if err != nil {
 			return nil, err
 		}
-		s.Tags = tags.Elements
+		s.Tags = tags
 		snippets = append(snippets, s)
 	}
-	return snippets, nil
+	return snippets, rows.Err()
+}
+
+func (r *MatchRepository) GetParticipants(ctx context.Context, id uuid.UUID) ([]*MatchParticipant, error) {
+	return NewMatchParticipantRepository(r.pool).GetByMatch(ctx, id)
+}
+func (r *MatchRepository) GetPool() *pgxpool.Pool { return r.pool }
+
+func (r *SnippetRepository) GetByID(ctx context.Context, id uuid.UUID) (*Snippet, error) {
+	rows, err := r.pool.Query(ctx, `SELECT * FROM snippets WHERE id=$1`, id)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[Snippet])
+}
+func (r *SnippetRepository) Create(ctx context.Context, s *Snippet) error {
+	s.Tags = append([]string{}, s.Tags...)
+	return r.pool.QueryRow(ctx, `INSERT INTO snippets(title,description,language,code,tags,complexity,author,author_id,source_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,created_at,updated_at`, s.Title, s.Description, s.Language, s.Code, s.Tags, s.Complexity, s.Author, s.AuthorID, s.SourceURL).Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
+}
+func (r *SnippetRepository) Update(ctx context.Context, s *Snippet) error {
+	return r.pool.QueryRow(ctx, `UPDATE snippets SET title=$2,description=$3,language=$4,code=$5,tags=$6,complexity=$7,source_url=$8,rating=$9 WHERE id=$1 RETURNING updated_at`, s.ID, s.Title, s.Description, s.Language, s.Code, s.Tags, s.Complexity, s.SourceURL, s.Rating).Scan(&s.UpdatedAt)
+}
+func (r *SnippetRepository) IncrementUsage(ctx context.Context, id uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE snippets SET usage_count=usage_count+1 WHERE id=$1`, id)
+	return err
+}
+func (r *SnippetRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM snippets WHERE id=$1`, id)
+	return err
+}
+func (r *ChallengeRepository) Update(ctx context.Context, c *Challenge) error {
+	return r.pool.QueryRow(ctx, `UPDATE challenges SET title=$2,description=$3,repository_url=$4,repository_branch=$5,target_paths=$6,exclude_paths=$7,severity=$8,category=$9,time_limit_seconds=$10,max_turns=$11,acceptance_criteria=$12,scoring_weights=$13,known_issues=$14,tags=$15,template_id=$16,is_public=$17 WHERE id=$1 RETURNING updated_at`, c.ID, c.Title, c.Description, c.RepositoryURL, c.RepositoryBranch, c.TargetPaths, c.ExcludePaths, c.Severity, c.Category, c.TimeLimitSeconds, c.MaxTurns, c.AcceptanceCriteria, c.ScoringWeights, c.KnownIssues, c.Tags, c.TemplateID, c.IsPublic).Scan(&c.UpdatedAt)
+}
+func (r *ChallengeRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM challenges WHERE id=$1`, id)
+	return err
 }

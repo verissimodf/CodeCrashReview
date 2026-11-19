@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import type { HTMLButtonAttributes } from 'svelte/elements';
+
 
 	export let variant: 'primary' | 'secondary' | 'danger' | 'ghost' | 'neon' = 'primary';
 	export let size: 'sm' | 'md' | 'lg' | 'xl' = 'md';
@@ -15,7 +15,6 @@
 	export let glowColor = 'neon-cyan';
 	export let badgeColorText = 'cyber-bg';
 
-	$$restProps: HTMLButtonAttributes;
 
 	const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-cyber-bg disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -45,13 +44,14 @@
 </script>
 
 <button
+    on:click
 	{type}
 	{disabled}
 	class={cn(
 		baseClasses,
 		variantClasses[variant],
 		sizeClasses[size],
-		widthClasses[fullWidth],
+		fullWidth && "w-full",
 		variant === 'neon' && 'neon-btn',
 		loading && 'opacity-75 cursor-wait'
 	)}

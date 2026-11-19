@@ -11,9 +11,9 @@ import (
 )
 
 type RateLimiter struct {
-	client *redis.Client
+	client   *redis.Client
 	requests int
-	window  int // seconds
+	window   int // seconds
 }
 
 func NewRateLimiter(client *redis.Client, requests, window int) *RateLimiter {

@@ -32,6 +32,8 @@
 		activeTab = tab;
 		loadLeaderboard();
 	}
+
+	import { Code } from 'lucide-svelte';
 </script>
 
 <div class="space-y-6 animate-fade-in">
@@ -90,12 +92,3 @@
 		/>
 	{/if}
 </div>
-
-<script>
-	import { Code } from 'lucide-svelte';
-
-	function handleTabChange(tab: string) {
-		activeTab = tab;
-		loadLeaderboard();
-	}
-</script>

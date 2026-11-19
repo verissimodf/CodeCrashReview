@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -23,9 +26,9 @@ var (
 )
 
 type Service struct {
-	userRepo   *database.UserRepository
-	jwtSecret  string
-	jwtExpiry  time.Duration
+	userRepo     *database.UserRepository
+	jwtSecret    string
+	jwtExpiry    time.Duration
 	argon2Params *argon2id.Params
 }
 
@@ -59,15 +62,6 @@ func NewService(userRepo *database.UserRepository, jwtSecret string, jwtExpiry t
 }
 
 func (s *Service) Register(ctx context.Context, username, email, password string) (*database.User, *Tokens, error) {
-	// Check if user exists
-	existing, _ := s.userRepo.GetByEmail(ctx, email)
-	if existing != nil {
-		return nil, nil, ErrUserExists
-	}
-
-	existing, _ = s.userRepo.GetByID(ctx, uuid.Nil) // This won't work, need GetByUsername
-	// For now, just check email
-
 	// Hash password
 	hash, err := argon2id.CreateHash(password, s.argon2Params)
 	if err != nil {
@@ -88,6 +82,10 @@ func (s *Service) Register(ctx context.Context, username, email, password string
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, nil, ErrUserExists
+		}
 		return nil, nil, fmt.Errorf("create user: %w", err)
 	}
 
@@ -189,19 +187,19 @@ func (s *Service) GetMyStats(ctx context.Context, userID uuid.UUID) (map[string]
 
 	return map[string]interface{}{
 		"user": map[string]interface{}{
-			"id":                   user.ID,
-			"username":             user.Username,
-			"rating":               user.Rating,
-			"rating_deviation":     user.RatingDeviation,
-			"rating_volatility":    user.RatingVolatility,
-			"peak_rating":          user.PeakRating,
-			"total_matches":        user.TotalMatches,
-			"wins":                 user.Wins,
-			"losses":               user.Losses,
-			"draws":                user.Draws,
-			"win_rate":             winRate,
-			"preferred_agents":     user.PreferredAgents,
-			"preferred_languages":  user.PreferredLanguages,
+			"id":                  user.ID,
+			"username":            user.Username,
+			"rating":              user.Rating,
+			"rating_deviation":    user.RatingDeviation,
+			"rating_volatility":   user.RatingVolatility,
+			"peak_rating":         user.PeakRating,
+			"total_matches":       user.TotalMatches,
+			"wins":                user.Wins,
+			"losses":              user.Losses,
+			"draws":               user.Draws,
+			"win_rate":            winRate,
+			"preferred_agents":    user.PreferredAgents,
+			"preferred_languages": user.PreferredLanguages,
 		},
 	}, nil
 }
@@ -290,13 +288,6 @@ func (s *Service) validateToken(tokenString, expectedType string) (*Claims, erro
 
 func (s *Service) ValidateAccessToken(tokenString string) (*Claims, error) {
 	return s.validateToken(tokenString, "access")
-}
-
-func (s *Service) AuthMiddleware() func(ctx context.Context, userID uuid.UUID) error {
-	return func(ctx context.Context, userID uuid.UUID) error {
-		// This will be implemented in the HTTP handler
-		return nil
-	}
 }
 
 // Gin middleware

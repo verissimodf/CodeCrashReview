@@ -59,7 +59,7 @@ function createAuthStore() {
 				const tokens = JSON.parse(storedTokens);
 				const user = JSON.parse(storedUser);
 				// Check if token is expired
-				const payload = JSON.parse(atob(tokens.access_token.split('.')[1]));
+				const payload = JSON.parse(atob(tokens.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
 				if (payload.exp * 1000 > Date.now()) {
 					set({
 						user,
@@ -80,9 +80,21 @@ function createAuthStore() {
 		}
 	}
 
-	async function refreshToken(refreshToken: string) {
+	async function authenticate(path: string, fields: Record<string, string>) {
+        const response = await fetch('/api/auth/' + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fields)
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Falha na autenticação');
+        const session = payload.data ?? payload;
+        setAuth(session.user, session.tokens);
+    }
+
+    async function refreshToken(refreshToken: string) {
 		try {
-			const response = await fetch(`${get(apiConfig).api_url}/auth/refresh`, {
+			const response = await fetch('/api/auth/refresh', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ refresh_token: refreshToken })
@@ -145,6 +157,8 @@ function createAuthStore() {
 
 	return {
 		subscribe,
+        login: (email: string, password: string) => authenticate("login", { email, password }),
+        register: (username: string, email: string, password: string) => authenticate("register", { username, email, password }),
 		setAuth,
 		clearAuth,
 		setLoading,

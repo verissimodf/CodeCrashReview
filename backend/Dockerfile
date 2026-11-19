@@ -1,7 +1,7 @@
 # Backend Dockerfile - Multi-stage build
 
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make gcc musl-dev
@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server ./cmd/api
 
 # Development stage
-FROM golang:1.22-alpine AS development
+FROM golang:1.25-alpine AS development
 
 RUN apk add --no-cache git make gcc musl-dev air
 
@@ -53,7 +53,6 @@ COPY --from=builder /server /app/server
 
 # Copy configs
 COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/configs ./configs
 
 # Change ownership
 RUN chown -R appuser:appuser /app
@@ -63,6 +62,6 @@ USER appuser
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/ready || exit 1
 
 CMD ["/app/server"]

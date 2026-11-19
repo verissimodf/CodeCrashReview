@@ -563,6 +563,8 @@ export function getCategoryIcon(category: string): string {
 // Export all
 // ============================================
 
-export * from './date';
-export * from './validation';
-export * from './code';
+
+export function getLanguageDisplayName(language: string): string {
+ const names: Record<string,string> = {python:'Python',javascript:'JavaScript',typescript:'TypeScript',cpp:'C++',java:'Java',rust:'Rust',shell:'Shell',html:'HTML',gherkin:'Gherkin'};
+ return names[language] || language;
+}

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { cn } from '$lib/utils';
-	import { SnippetCard } from './SnippetCard.svelte';
+	import SnippetCard from './SnippetCard.svelte';
 	import { Filter, Search, ChevronDown, Loader2, Download, Upload } from 'lucide-svelte';
 	import { Dropdown } from '$lib/components/ui';
 
@@ -31,7 +31,7 @@
 		{ value: 'title', label: 'Nome (A-Z)' }
 	];
 
-	let filteredSnippets = $derived(
+	$: filteredSnippets = (
 		snippets
 			.filter(s => {
 				if (searchQuery && !s.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -162,7 +162,7 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-			{#each snippets as snippet}
+			{#each filteredSnippets as snippet}
 				<SnippetCard
 					snippet={snippet}
 					onInsert={onInsert}
@@ -171,3 +171,4 @@
 			{/each}
 		</div>
 	{/if}
+</div>

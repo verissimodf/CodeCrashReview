@@ -113,7 +113,7 @@
 							<div class="inline-flex items-center justify-end gap-2">
 								<span class="w-6 h-6 rounded-lg flex items-center justify-center font-display font-bold text-cyber-bg" style="background: linear-gradient(135deg, {getAgentDisplayInfo(entry.preferred_agent).color}, {getAgentDisplayInfo(entry.preferred_agent).color}80);">
 									<svelte:component this={agentIcons[entry.preferred_agent]} class="w-4 h-4" />
-								</div>
+								</span>
 								<span class="text-sm text-neutral-400 hidden sm:inline">{getAgentDisplayInfo(entry.preferred_agent).name}</span>
 							</div>
 						{:else}
