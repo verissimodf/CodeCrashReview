@@ -187,13 +187,13 @@ list-models:
 # Production
 # ===========================================
 prod-build:
-	docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
+	docker compose -f compose.host.yml build
 
 prod-up:
-	docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+	docker compose -f compose.host.yml up -d --wait
 
 prod-down:
-	docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
+	docker compose -f compose.host.yml down
 
 # ===========================================
 # CI Helpers

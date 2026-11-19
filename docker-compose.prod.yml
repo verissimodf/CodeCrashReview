@@ -1,114 +1,10 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Production
-  postgres:
-    image: postgres:16-alpine
-    container_name: codecrash-postgres-prod
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4g
-        reservations:
-          cpus: '1'
-          memory: 2g
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - codecrash-network
-
-  # Redis Production
-  redis:
-    image: redis:7-alpine
-    container_name: codecrash-redis-prod
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis_data:/data
-    ports:
-      - "127.0.0.1:6379:6379"
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1g
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - codecrash-network
-
-  # FreeLLM-Local Production (GPU)
-  freellm:
-    image: ollama/ollama:latest
-    container_name: codecrash-freellm-prod
-    environment:
-      OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "127.0.0.1:11434:11434"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-        limits:
-          cpus: '8'
-          memory: 32g
-    restart: unless-stopped
-    networks:
-      - codecrash-network
-    profiles:
-      - gpu
-
-  # FreeLLM-Local CPU Fallback
-  freellm-cpu:
-    image: ollama/ollama:latest
-    container_name: codecrash-freellm-cpu-prod
-    environment:
-      OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "127.0.0.1:11435:11434"
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 16g
-    restart: unless-stopped
-    networks:
-      - codecrash-network
-    profiles:
-      - cpu
-
-  # Backend Production
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
       target: production
-    container_name: codecrash-backend-prod
+    container_name: codecrash-backend
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
@@ -118,8 +14,8 @@ services:
       - ARGON2_MEMORY=65536
       - ARGON2_THREADS=4
       - ARGON2_KEYLEN=32
-      - FREELLM_BASE_URL=http://freellm:11434/v1
-      - FREELLM_API_KEY=ollama
+      - FREELLM_BASE_URL=http://host.docker.internal:8082/v1
+      - FREELLM_API_KEY=${FREELLM_API_KEY}
       - DEFAULT_MODEL=${DEFAULT_MODEL}
       - DOCKER_HOST=unix:///var/run/docker.sock
       - SANDBOX_NETWORK=codecrash-sandbox
@@ -143,8 +39,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      freellm:
-        condition: service_started
     networks:
       - codecrash-network
       - codecrash-sandbox
@@ -158,19 +52,20 @@ services:
           cpus: '2'
           memory: 4g
     privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # Frontend Production (Nginx)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       target: production
-    container_name: codecrash-frontend-prod
+    container_name: codecrash-frontend
     environment:
-      - PUBLIC_WS_URL=wss://${DOMAIN}/ws
-      - PUBLIC_API_URL=https://${DOMAIN}/api
+      - PUBLIC_WS_URL=wss://codecrashreview.laytech.com.br/ws
+      - PUBLIC_API_URL=https://codecrashreview.laytech.com.br/api
     ports:
-      - "127.0.0.1:5173:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
     networks:
@@ -182,94 +77,6 @@ services:
           cpus: '1'
           memory: 1g
 
-  # Nginx Reverse Proxy (SSL Termination)
-  nginx:
-    image: nginx:alpine
-    container_name: codecrash-nginx
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - codecrash-network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512m
-
-  # Prometheus Monitoring
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: codecrash-prometheus
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "127.0.0.1:9090:9090"
-    networks:
-      - codecrash-network
-    restart: unless-stopped
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
-
-  # Grafana
-  grafana:
-    image: grafana/grafana:latest
-    container_name: codecrash-grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    ports:
-      - "127.0.0.1:3000:3000"
-    networks:
-      - codecrash-network
-    restart: unless-stopped
-    depends_on:
-      - prometheus
-
-  # Loki (Logs)
-  loki:
-    image: grafana/loki:latest
-    container_name: codecrash-loki
-    volumes:
-      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
-      - loki_data:/loki
-    ports:
-      - "127.0.0.1:3100:3100"
-    networks:
-      - codecrash-network
-    restart: unless-stopped
-
-  # Promtail (Log shipping)
-  promtail:
-    image: grafana/promtail:latest
-    container_name: codecrash-promtail
-    volumes:
-      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
-      - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    networks:
-      - codecrash-network
-    restart: unless-stopped
-    depends_on:
-      - loki
-
 networks:
   codecrash-network:
     driver: bridge
@@ -280,8 +87,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  ollama_data:
   sandbox_cache:
-  prometheus_data:
-  grafana_data:
-  loki_data:

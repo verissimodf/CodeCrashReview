@@ -12,6 +12,17 @@ PostgreSQL e Redis estão implantados. O PostgreSQL recebeu a migração Goose 1
 
 Para verificar os serviços instalados, execute `docker compose -f compose.host.yml ps` na raiz do repositório. Para iniciar apenas os serviços de dados, use `docker compose -f compose.host.yml up -d --wait postgres redis`.
 
+PostgreSQL e Redis usam, respectivamente, as portas 5432 e 6379 apenas dentro
+da rede `data`. Eles não possuem `ports:` e, portanto, não disputam as portas do
+host com `laus_postgres` ou outros containers. O backend deve continuar usando
+os nomes DNS `postgres:5432` e `redis:6379`; alterar a porta interna não resolve
+um conflito de publicação no host.
+
+Para atualizar a implantação, use
+`docker compose -f compose.host.yml up -d --build --wait`. Não execute
+`docker compose down -v` em produção, pois `-v` remove os volumes persistentes.
+O volume de banco desta implantação é `codecrashreview_pgdata`.
+
 
 ## Arena implantada
 

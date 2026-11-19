@@ -416,12 +416,16 @@ PUBLIC_API_URL=http://localhost:8080/api
 ### Docker Compose Produção
 
 ```bash
-# Build imagens de produção
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml build
+# Validar a configuração usada neste host
+docker compose -f compose.host.yml config --quiet
 
-# Deploy
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Build e deploy preservando os volumes
+docker compose -f compose.host.yml up -d --build --wait
 ```
+
+PostgreSQL e Redis ficam somente nas redes internas do Compose e não publicam
+as portas 5432/6379 no host. Não use `down -v` em produção: a opção `-v` remove
+os volumes persistentes e pode apagar banco, partidas e pontuações.
 
 ### Kubernetes (Helm)
 

@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
     container_name: codecrash-postgres
@@ -11,9 +8,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-codecrash}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codecrash}"]
       interval: 10s
@@ -22,15 +16,12 @@ services:
     networks:
       - codecrash-network
 
-  # Redis for sessions, pub/sub, cache
   redis:
     image: redis:7-alpine
     container_name: codecrash-redis
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -39,64 +30,25 @@ services:
     networks:
       - codecrash-network
 
-  # FreeLLM-Local (Ollama) - GPU enabled
-  freellm:
-    image: ollama/ollama:latest
-    container_name: codecrash-freellm
-    environment:
-      OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    networks:
-      - codecrash-network
-    profiles:
-      - gpu
-
-  # FreeLLM-Local CPU fallback
-  freellm-cpu:
-    image: ollama/ollama:latest
-    container_name: codecrash-freellm-cpu
-    environment:
-      OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11435:11434"
-    networks:
-      - codecrash-network
-    profiles:
-      - cpu
-
-  # Backend API + WebSocket Server
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: development
+      target: production
     container_name: codecrash-backend
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-codecrash}:${POSTGRES_PASSWORD:-codecrash}@postgres:5432/${POSTGRES_DB:-codecrash}?sslmode=disable
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRY=24h
       - ARGON2_TIME=3
       - ARGON2_MEMORY=65536
       - ARGON2_THREADS=4
       - ARGON2_KEYLEN=32
-      - FREELLM_BASE_URL=http://freellm:11434/v1
+      # FreeLLM-Local no host (acessível via host.docker.internal)
+      - FREELLM_BASE_URL=http://host.docker.internal:8082/v1
       - FREELLM_API_KEY=ollama
-      - DEFAULT_MODEL=codellama:34b
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-codellama:34b}
       - DOCKER_HOST=unix:///var/run/docker.sock
       - SANDBOX_NETWORK=codecrash-sandbox
       - SANDBOX_CPU_LIMIT=2
@@ -106,162 +58,41 @@ services:
       - GLICKO_TAU=0.5
       - MATCH_TIMEOUT_SECONDS=300
       - QUEUE_CHECK_INTERVAL_MS=5000
-      - GIN_MODE=debug
+      - GIN_MODE=release
     volumes:
-      - ./backend:/app
       - /var/run/docker.sock:/var/run/docker.sock
       - sandbox_cache:/tmp/sandbox-cache
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      freellm:
-        condition: service_started
     networks:
       - codecrash-network
       - codecrash-sandbox
+    restart: unless-stopped
     privileged: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # Frontend Development Server
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: development
+      target: production
     container_name: codecrash-frontend
     environment:
-      - PUBLIC_WS_URL=ws://localhost:8080/ws
-      - PUBLIC_API_URL=http://localhost:8080/api
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - PUBLIC_WS_URL=wss://codecrashreview.laytech.com.br/ws
+      - PUBLIC_API_URL=https://codecrashreview.laytech.com.br/api
     ports:
-      - "5173:5173"
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
     networks:
       - codecrash-network
-
-  # Sandbox Runner (pre-warmed containers per language)
-  sandbox-cpp:
-    build: ./sandbox/cpp
-    container_name: codecrash-sandbox-cpp
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2g
-    profiles:
-      - sandbox
-
-  sandbox-python:
-    build: ./sandbox/python
-    container_name: codecrash-sandbox-python
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2g
-    profiles:
-      - sandbox
-
-  sandbox-java:
-    build: ./sandbox/java
-    container_name: codecrash-sandbox-java
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 3g
-    profiles:
-      - sandbox
-
-  sandbox-javascript:
-    build: ./sandbox/javascript
-    container_name: codecrash-sandbox-javascript
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2g
-    profiles:
-      - sandbox
-
-  sandbox-typescript:
-    build: ./sandbox/typescript
-    container_name: codecrash-sandbox-typescript
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2g
-    profiles:
-      - sandbox
-
-  sandbox-rust:
-    build: ./sandbox/rust
-    container_name: codecrash-sandbox-rust
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 3g
-    profiles:
-      - sandbox
-
-  sandbox-shell:
-    build: ./sandbox/shell
-    container_name: codecrash-sandbox-shell
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512m
-    profiles:
-      - sandbox
-
-  sandbox-html:
-    build: ./sandbox/html
-    container_name: codecrash-sandbox-html
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512m
-    profiles:
-      - sandbox
-
-  sandbox-gherkin:
-    build: ./sandbox/gherkin
-    container_name: codecrash-sandbox-gherkin
-    networks:
-      - codecrash-sandbox
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512m
-    profiles:
-      - sandbox
+    restart: unless-stopped
 
 networks:
   codecrash-network:
@@ -273,5 +104,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  ollama_data:
   sandbox_cache:
