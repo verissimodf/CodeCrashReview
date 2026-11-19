@@ -1,0 +1,6 @@
+[Unit]
+Description=Forward CodeCrashReview inference requests to FreeLLM-Local
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:8082
+NoNewPrivileges=yes

@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5/stdlib"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,11 +44,8 @@ func Connect(databaseURL string) (*pgxpool.Pool, error) {
 
 func Migrate(pool *pgxpool.Pool) error {
 	// Get standard database connection for goose
-	db, err := pool.Acquire(context.Background())
-	if err != nil {
-		return fmt.Errorf("acquire connection: %w", err)
-	}
-	defer db.Release()
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
 
 	// Set up goose
 	goose.SetBaseFS(nil) // Will use filesystem
@@ -58,11 +57,10 @@ func Migrate(pool *pgxpool.Pool) error {
 	// For now, we'll use the filesystem
 	migrationsDir := "./migrations"
 	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-		log.Warn().Str("dir", migrationsDir).Msg("Migrations directory not found, skipping")
-		return nil
+		return fmt.Errorf("migrations directory missing: %w", err)
 	}
 
-	if err := goose.Up(db.Conn(), migrationsDir); err != nil {
+	if err := goose.Up(db, migrationsDir); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 

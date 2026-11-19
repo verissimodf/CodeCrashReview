@@ -1,0 +1,11 @@
+[Unit]
+Description=CodeCrashReview local FreeLLM socket
+
+[Socket]
+ListenStream=%h/.local/share/codecrashreview/proxy/freellm.sock
+DirectoryMode=0700
+SocketMode=0600
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

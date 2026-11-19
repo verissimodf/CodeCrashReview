@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import type { HTMLDivAttributes } from 'svelte/elements';
+
 
 	export let variant: 'default' | 'glow' | 'neon' | 'glass' = 'default';
 	export let padding: 'none' | 'sm' | 'md' | 'lg' = 'md';
@@ -10,7 +10,6 @@
 	export let neonColorGlow = 'neon-cyanGlow';
 	export let borderColor = 'cyber-border';
 
-	$$restProps: HTMLDivAttributes;
 
 	const paddingClasses = {
 		none: '',
@@ -36,7 +35,7 @@
 	const paddingClass = paddingClasses[padding];
 	const baseClass = baseClasses;
 	const variantClass = variantClasses[variant];
-	const hoverClass = hoverClasses[hover];
+	const hoverClass = hover && hoverClasses.true;
 	const neonStyle = variant === 'neon' ? `
 		background: linear-gradient(135deg, var(--tw-color-${neonColor})/10, var(--tw-color-${neonColorGlow})/10);
 		box-shadow: 0 0 0 1px var(--tw-color-${neonColor}), 0 0 20px var(--tw-color-${neonColorGlow});

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
+
+	"codecrashreview/backend/internal/arena"
 	"github.com/rs/zerolog"
 
 	"codecrashreview/backend/internal/auth"
@@ -62,8 +62,8 @@ func main() {
 	authService := auth.NewService(userRepo, cfg.JWTSecret, cfg.JWTExpiry)
 	matchmakingService := matchmaking.NewService(matchRepo, participantRepo, userRepo, challengeRepo, redisClient, cfg.EloKFactor, cfg.GlickoTau)
 	challengeService := challenges.NewService(challengeRepo, templateRepo, db)
-	snippetService := snippets.NewService(snippetRepo, nil, db)
-	leaderboardService := leaderboard.NewService(matchRepo, nil, redisClient)
+	snippetService := snippets.NewService(snippetRepo, collectionRepo, db)
+	leaderboardService := leaderboard.NewService(db)
 	wsHub := websocket.NewHub(redisClient, logger)
 
 	// Set dependencies
@@ -77,7 +77,6 @@ func main() {
 	go matchmakingService.StartWorker(context.Background())
 
 	// Start leaderboard cache updater
-	go leaderboardService.StartCacheUpdater(context.Background())
 
 	// Setup Gin router
 	if cfg.GinMode == "release" {
@@ -85,8 +84,9 @@ func main() {
 	}
 
 	router := gin.New()
+	router.SetTrustedProxies(nil)
 	router.Use(gin.Recovery())
-	router.Use(ratelimit.RateLimiter(redisClient, cfg.RateLimitRequests, cfg.RateLimitWindow))
+
 	router.Use(corsMiddleware())
 	router.Use(requestLogger(&logger))
 
@@ -95,38 +95,27 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "timestamp": time.Now().Unix()})
 	})
 
+	router.GET("/ready", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if db.Ping(ctx) != nil || redisClient.Ping(ctx).Err() != nil {
+			c.JSON(503, gin.H{"status": "unavailable"})
+			return
+		}
+		c.JSON(200, gin.H{"status": "ready"})
+	})
+	router.Use(ratelimit.RateLimiterMiddleware(redisClient, cfg.RateLimitRequests, cfg.RateLimitWindow))
 	// API routes
 	api := router.Group("/api")
 	{
 		// Auth routes (public)
-		authRoutes := api.Group("/auth")
-		{
-			authRoutes.POST("/register", authService.Register)
-			authRoutes.POST("/login", authService.Login)
-			authRoutes.POST("/refresh", authService.RefreshToken)
-		}
-
-		// Protected routes
+		authService.RegisterPublic(api.Group("/auth"))
 		protected := api.Group("/")
-		protected.Use(authService.AuthMiddleware())
+		protected.Use(authService.GinAuthMiddleware())
 		{
-			// User routes
-			protected.GET("/users/me", authService.GetCurrentUser)
-			protected.PATCH("/users/me", authService.UpdateCurrentUser)
-			protected.GET("/users/:id", authService.GetUser)
-			protected.GET("/stats/me", authService.GetMyStats)
-			protected.GET("/users/:id/stats", authService.GetUserStats)
-
-			// Match routes
-			protected.POST("/matches", matchmakingService.CreateMatch)
-			protected.GET("/matches", matchmakingService.ListMatches)
-			protected.GET("/matches/:id", matchmakingService.GetMatch)
-			protected.POST("/matches/:id/join", matchmakingService.JoinMatch)
-			protected.POST("/matches/:id/leave", matchmakingService.LeaveMatch)
-			protected.POST("/matches/queue", matchmakingService.JoinQueue)
-			protected.DELETE("/matches/queue", matchmakingService.LeaveQueue)
-			protected.GET("/matches/queue/status", matchmakingService.GetQueueStatus)
-
+			authService.RegisterProtected(protected)
+			matchmakingService.RegisterRoutes(protected)
+			arena.Register(protected, db)
 			// Challenge routes
 			challengeService.RegisterRoutes(protected)
 
@@ -139,7 +128,7 @@ func main() {
 	}
 
 	// WebSocket endpoint
-	router.GET("/ws", wsHub.HandleWebSocket)
+	router.GET("/ws", wsHub.ServeHTTP)
 
 	// Start server
 	srv := &http.Server{
@@ -191,7 +180,6 @@ func requestLogger(logger *zerolog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
 
 		c.Next()
 
@@ -199,10 +187,6 @@ func requestLogger(logger *zerolog.Logger) gin.HandlerFunc {
 		clientIP := c.ClientIP()
 		method := c.Request.Method
 		statusCode := c.Writer.Status()
-
-		if raw != "" {
-			path = path + "?" + raw
-		}
 
 		logger.Info().
 			Str("method", method).

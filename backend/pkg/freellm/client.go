@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,8 +23,9 @@ type Client struct {
 }
 
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Role      string     `json:"role"`
+	Content   string     `json:"content"`
 }
 
 type ChatRequest struct {
@@ -74,13 +77,21 @@ type ModelInfo struct {
 }
 
 func NewClient(baseURL, apiKey string) *Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if socket := os.Getenv("FREELLM_UNIX_SOCKET"); socket != "" {
+		transport.Proxy = nil
+		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		}
+	}
 	return &Client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout:   120 * time.Second,
+			Transport: transport,
 		},
-		logger: zerolog.DefaultContextLogger,
+		logger: zerolog.Nop(),
 	}
 }
 
@@ -218,15 +229,15 @@ type AgentRequest struct {
 }
 
 type AgentResponse struct {
-	Content     string
-	ToolCalls   []ToolCall
-	TokensUsed  int
-	LatencyMs   int64
+	Content    string
+	ToolCalls  []ToolCall
+	TokensUsed int
+	LatencyMs  int64
 }
 
 type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
 	Function FunctionCall `json:"function"`
 }
 
@@ -265,15 +276,9 @@ func (c *Client) ExecuteAgent(ctx context.Context, req *AgentRequest) (*AgentRes
 
 	choice := resp.Choices[0]
 
-	toolCalls := []ToolCall{}
-	if choice.Message.Content == "" && choice.FinishReason == "tool_calls" {
-		// Parse tool calls from response
-		// This depends on the specific API format
-	}
-
 	return &AgentResponse{
 		Content:    choice.Message.Content,
-		ToolCalls:  toolCalls,
+		ToolCalls:  choice.Message.ToolCalls,
 		TokensUsed: resp.Usage.TotalTokens,
 		LatencyMs:  latency,
 	}, nil

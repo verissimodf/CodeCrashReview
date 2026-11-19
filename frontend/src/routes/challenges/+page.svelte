@@ -10,6 +10,8 @@
 	onMount(() => {
 		loadChallenges();
 	});
+
+	import { Plus, RefreshCw } from 'lucide-svelte';
 </script>
 
 <div class="space-y-6 animate-fade-in">
@@ -41,7 +43,3 @@
 		onCreate={() => { /* navigate to create */ }}
 	/>
 </div>
-
-<script>
-	import { Plus, RefreshCw } from 'lucide-svelte';
-</script>

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+
 	"math"
 	"sync"
 	"time"
@@ -17,36 +17,36 @@ import (
 )
 
 type Service struct {
-	matchRepo      *database.MatchRepository
+	matchRepo       *database.MatchRepository
 	participantRepo *database.MatchParticipantRepository
-	userRepo       *database.UserRepository
-	challengeRepo  *database.ChallengeRepository
-	redis          *redis.Client
-	logger         zerolog.Logger
-	eloKFactor     float64
-	glickoTau      float64
+	userRepo        *database.UserRepository
+	challengeRepo   *database.ChallengeRepository
+	redis           *redis.Client
+	logger          zerolog.Logger
+	eloKFactor      float64
+	glickoTau       float64
 
 	// Queue management
-	queueMu        sync.Mutex
-	queues         map[string][]*QueueEntry // key: "mode:language:rating_bucket"
-	processing     bool
+	queueMu    sync.Mutex
+	queues     map[string][]*QueueEntry // key: "mode:language:rating_bucket"
+	processing bool
 }
 
 type QueueEntry struct {
-	UserID        uuid.UUID
-	Username      string
-	Mode          string
+	UserID         uuid.UUID
+	Username       string
+	Mode           string
 	PreferredAgent string
-	Language      string
-	Rating        int
-	JoinedAt      time.Time
+	Language       string
+	Rating         int
+	JoinedAt       time.Time
 }
 
 type MatchResult struct {
-	MatchID       uuid.UUID
-	ParticipantA  *MatchParticipantInfo
-	ParticipantB  *MatchParticipantInfo
-	ChallengeID   uuid.UUID
+	MatchID      uuid.UUID
+	ParticipantA *MatchParticipantInfo
+	ParticipantB *MatchParticipantInfo
+	ChallengeID  uuid.UUID
 }
 
 type MatchParticipantInfo struct {
@@ -76,17 +76,17 @@ type CodeChange struct {
 }
 
 type DiffHunk struct {
-	OldStart  int
-	OldLines  int
-	NewStart  int
-	NewLines  int
-	Lines     []DiffLine
+	OldStart int
+	OldLines int
+	NewStart int
+	NewLines int
+	Lines    []DiffLine
 }
 
 type DiffLine struct {
-	Type        string
-	Content     string
-	LineNumber  int
+	Type       string
+	Content    string
+	LineNumber int
 }
 
 func NewService(
@@ -99,15 +99,15 @@ func NewService(
 	glickoTau float64,
 ) *Service {
 	return &Service{
-		matchRepo:      matchRepo,
+		matchRepo:       matchRepo,
 		participantRepo: participantRepo,
-		userRepo:       userRepo,
-		challengeRepo:  challengeRepo,
-		redis:          redis,
-		logger:         zerolog.DefaultContextLogger,
-		eloKFactor:     eloKFactor,
-		glickoTau:      glickoTau,
-		queues:         make(map[string][]*QueueEntry),
+		userRepo:        userRepo,
+		challengeRepo:   challengeRepo,
+		redis:           redis,
+		logger:          *zerolog.Ctx(context.Background()),
+		eloKFactor:      eloKFactor,
+		glickoTau:       glickoTau,
+		queues:          make(map[string][]*QueueEntry),
 	}
 }
 
@@ -127,19 +127,7 @@ func (s *Service) StartWorker(ctx context.Context) {
 
 func (s *Service) processQueues(ctx context.Context) {
 	s.queueMu.Lock()
-	if s.processing {
-		s.queueMu.Unlock()
-		return
-	}
-	s.processing = true
-	s.queueMu.Unlock()
-
-	defer func() {
-		s.queueMu.Lock()
-		s.processing = false
-		s.queueMu.Unlock()
-	}()
-
+	defer s.queueMu.Unlock()
 	// Process each queue
 	for queueKey, queue := range s.queues {
 		if len(queue) < 2 {
@@ -149,7 +137,20 @@ func (s *Service) processQueues(ctx context.Context) {
 		// Try to match players
 		matched := s.tryMatch(queue)
 		if matched != nil {
-			// Remove matched players from queue
+			var challengeID uuid.UUID
+			err := s.matchRepo.GetPool().QueryRow(ctx, `SELECT id FROM challenges WHERE is_public ORDER BY play_count,created_at LIMIT 1`).Scan(&challengeID)
+			if err != nil {
+				continue
+			}
+			people := make([]*MatchParticipantInfo, 0, len(matched))
+			for _, entry := range matched {
+				people = append(people, &MatchParticipantInfo{UserID: entry.UserID, AgentPersona: entry.PreferredAgent, Rating: entry.Rating})
+			}
+			if _, err := s.CreateMatch(ctx, challengeID, matched[0].Mode, people); err != nil {
+				s.logger.Error().Err(err).Msg("Matchmaking failed")
+				continue
+			}
+
 			s.removeMatchedFromQueue(queueKey, matched)
 		}
 	}
@@ -204,14 +205,18 @@ func (s *Service) JoinQueue(ctx context.Context, userID uuid.UUID, mode, preferr
 		JoinedAt:       time.Now(),
 	}
 
-	queueKey := fmt.Sprintf("%s:%s:%d", mode, language, user.Rating/100*100)
+	queueKey := fmt.Sprintf("%s:%s", mode, language)
 	s.queueMu.Lock()
+	for _, entries := range s.queues {
+		for _, e := range entries {
+			if e.UserID == userID {
+				s.queueMu.Unlock()
+				return fmt.Errorf("already queued")
+			}
+		}
+	}
 	s.queues[queueKey] = append(s.queues[queueKey], entry)
 	s.queueMu.Unlock()
-
-	// Store in Redis for distributed queue
-	queueData, _ := json.Marshal(entry)
-	s.redis.LPush(ctx, "matchmaking:queue:"+queueKey, queueData)
 
 	s.logger.Info().Str("user_id", userID.String()).Str("queue", queueKey).Msg("Player joined queue")
 	return nil
@@ -245,11 +250,11 @@ func (s *Service) GetQueueStatus(ctx context.Context, userID uuid.UUID) (map[str
 		for i, entry := range queue {
 			if entry.UserID == userID {
 				return map[string]interface{}{
-					"in_queue":            true,
-					"queue_key":           queueKey,
-					"position":            i + 1,
-					"players_in_queue":    len(queue),
-					"estimated_wait_sec":  len(queue) * 30, // rough estimate
+					"in_queue":           true,
+					"queue_key":          queueKey,
+					"position":           i + 1,
+					"players_in_queue":   len(queue),
+					"estimated_wait_sec": len(queue) * 30, // rough estimate
 				}, nil
 			}
 		}
@@ -277,34 +282,29 @@ func (s *Service) CreateMatch(ctx context.Context, challengeID uuid.UUID, mode s
 		Scoring:              json.RawMessage(`{}`),
 	}
 
-	if err := s.matchRepo.Create(ctx, match); err != nil {
+	tx, err := s.matchRepo.GetPool().Begin(ctx)
+	if err != nil {
 		return nil, err
 	}
-
-	// Create participants
+	defer tx.Rollback(ctx)
+	match.Status = "active"
+	err = tx.QueryRow(ctx, `INSERT INTO matches(mode,status,challenge_id,max_turns,time_limit_seconds,time_remaining_seconds,started_at) VALUES($1,'active',$2,$3,$4,$4,now()) RETURNING id,created_at,updated_at,started_at`, mode, challengeID, challenge.MaxTurns, challenge.TimeLimitSeconds).Scan(&match.ID, &match.CreatedAt, &match.UpdatedAt, &match.StartedAt)
+	if err != nil {
+		return nil, err
+	}
 	for _, p := range participants {
-		participant := &database.MatchParticipant{
-			MatchID:       match.ID,
-			UserID:        p.UserID,
-			AgentPersona:  p.AgentPersona,
-			RatingBefore:  p.Rating,
-			Score:         0,
-			Status:        "waiting",
-			Connected:     false,
-		}
-		if err := s.participantRepo.Create(ctx, participant); err != nil {
+		_, err = tx.Exec(ctx, `INSERT INTO match_participants(match_id,user_id,agent_persona,rating_before) VALUES($1,$2,$3,$4)`, match.ID, p.UserID, p.AgentPersona, p.Rating)
+		if err != nil {
 			return nil, err
 		}
 	}
-
-	// Update match status
-	match.Status = "active"
-	now := time.Now()
-	match.StartedAt = &now
-	if err := s.matchRepo.Update(ctx, match); err != nil {
+	_, err = tx.Exec(ctx, `UPDATE challenges SET play_count=play_count+1 WHERE id=$1`, challengeID)
+	if err != nil {
 		return nil, err
 	}
-
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
 	s.logger.Info().Str("match_id", match.ID.String()).Msg("Match created")
 	return match, nil
 }
@@ -367,40 +367,6 @@ func (s *Service) GetMatch(ctx context.Context, matchID uuid.UUID) (*database.Ma
 	return s.matchRepo.GetByID(ctx, matchID)
 }
 
-func (s *Service) SubmitCode(ctx context.Context, matchID, userID uuid.UUID, files []CodeFile, changes []CodeChange) error {
-	// This would be called by agents to submit their solutions
-	// Implementation would involve:
-	// 1. Validate it's the player's turn
-	// 2. Run code in sandbox
-	// 3. Run tests
-	// 4. Calculate score
-	// 5. Update match state
-	// 6. Check for match end conditions
-	return nil
-}
-
-func (s *Service) EndMatch(ctx context.Context, matchID uuid.UUID) error {
-	match, err := s.matchRepo.GetByID(ctx, matchID)
-	if err != nil {
-		return err
-	}
-
-	participants, err := s.participantRepo.GetByMatch(ctx, matchID)
-	if err != nil {
-		return err
-	}
-
-	// Calculate final scores and ratings
-	// Determine winner
-	// Update user ratings
-	// Create rating history entries
-
-	now := time.Now()
-	match.EndedAt = &now
-	match.Status = "completed"
-	return s.matchRepo.Update(ctx, match)
-}
-
 // Elo rating calculation
 func (s *Service) CalculateEloChange(ratingA, ratingB int, scoreA float64) int {
 	expectedA := 1.0 / (1.0 + math.Pow(10, float64(ratingB-ratingA)/400))
@@ -424,7 +390,7 @@ func (s *Service) CalculateGlicko2Change(rating, deviation, volatility float64, 
 }
 
 type GlickoResult struct {
-	OpponentRating   float64
+	OpponentRating    float64
 	OpponentDeviation float64
-	Score            float64 // 1.0 win, 0.5 draw, 0.0 loss
+	Score             float64 // 1.0 win, 0.5 draw, 0.0 loss
 }

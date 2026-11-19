@@ -1,19 +1,17 @@
 package challenges
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
-	"log"
+
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"codecrashreview/backend/internal/database"
 )
@@ -30,7 +28,7 @@ func NewService(challengeRepo *database.ChallengeRepository, templateRepo *datab
 		challengeRepo: challengeRepo,
 		templateRepo:  templateRepo,
 		pool:          pool,
-		logger:        zerolog.DefaultContextLogger,
+		logger:        log.Logger,
 	}
 }
 
@@ -91,24 +89,35 @@ func (s *Service) CreateChallenge(c *gin.Context) {
 		return
 	}
 
+	// Set default scoring weights if not provided
+	if len(req.ScoringWeights) == 0 {
+		req.ScoringWeights = map[string]float64{
+			"correctness":   0.4,
+			"security":      0.3,
+			"performance":   0.15,
+			"style":         0.1,
+			"test_coverage": 0.05,
+		}
+	}
+
 	challenge := &database.Challenge{
-		Title:                req.Title,
-		Description:          req.Description,
-		RepositoryURL:        req.RepositoryURL,
-		RepositoryBranch:     req.RepositoryBranch,
-		TargetPaths:          req.TargetPaths,
-		ExcludePaths:         req.ExcludePaths,
-		Severity:             req.Severity,
-		Category:             req.Category,
-		TimeLimitSeconds:     req.TimeLimitSeconds,
-		MaxTurns:             req.MaxTurns,
-		AcceptanceCriteria:   req.AcceptanceCriteria,
-		ScoringWeights:       req.ScoringWeights,
-		KnownIssues:          req.KnownIssues,
-		Tags:                 req.Tags,
-		TemplateID:           req.TemplateID,
-		IsPublic:             req.IsPublic,
-		CreatedBy:            userID.(uuid.UUID),
+		Title:              req.Title,
+		Description:        req.Description,
+		RepositoryURL:      req.RepositoryURL,
+		RepositoryBranch:   req.RepositoryBranch,
+		TargetPaths:        req.TargetPaths,
+		ExcludePaths:       req.ExcludePaths,
+		Severity:           req.Severity,
+		Category:           req.Category,
+		TimeLimitSeconds:   req.TimeLimitSeconds,
+		MaxTurns:           req.MaxTurns,
+		AcceptanceCriteria: encodeJSON(req.AcceptanceCriteria),
+		ScoringWeights:     encodeJSON(req.ScoringWeights),
+		KnownIssues:        encodeJSON(req.KnownIssues),
+		Tags:               req.Tags,
+		TemplateID:         req.TemplateID,
+		IsPublic:           req.IsPublic,
+		CreatedBy:          userID.(uuid.UUID),
 	}
 
 	// Set defaults
@@ -120,17 +129,6 @@ func (s *Service) CreateChallenge(c *gin.Context) {
 	}
 	if challenge.RepositoryBranch == "" {
 		challenge.RepositoryBranch = "main"
-	}
-
-	// Set default scoring weights if not provided
-	if len(challenge.ScoringWeights) == 0 {
-		challenge.ScoringWeights = map[string]float64{
-			"correctness":    0.4,
-			"security":       0.3,
-			"performance":    0.15,
-			"style":          0.1,
-			"test_coverage":  0.05,
-		}
 	}
 
 	ctx := c.Request.Context()
@@ -164,10 +162,11 @@ func (s *Service) ListChallenges(c *gin.Context) {
 	}
 
 	filters := map[string]interface{}{
-		"category":  category,
-		"severity":  severity,
-		"search":    search,
-		"language":  language,
+		"owner":       c.MustGet("user_id"),
+		"category":    category,
+		"severity":    severity,
+		"search":      search,
+		"language":    language,
 		"template_id": templateID,
 	}
 
@@ -191,10 +190,10 @@ func (s *Service) ListChallenges(c *gin.Context) {
 		"success": true,
 		"data":    challenges,
 		"meta": gin.H{
-			"page":         offset/limit + 1,
-			"per_page":     limit,
-			"total":        count,
-			"total_pages":  (count + limit - 1) / limit,
+			"page":        offset/limit + 1,
+			"per_page":    limit,
+			"total":       count,
+			"total_pages": (count + limit - 1) / limit,
 		},
 	})
 }
@@ -219,12 +218,10 @@ func (s *Service) GetChallenge(c *gin.Context) {
 		return
 	}
 
-	// Increment play count
-	go func() {
-		ctx := context.Background()
-		s.challengeRepo.IncrementPlayCount(context.Background(), id)
-	}()
-
+	if !challenge.IsPublic && challenge.CreatedBy != c.MustGet("user_id").(uuid.UUID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Challenge not found"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": challenge})
 }
 
@@ -296,13 +293,13 @@ func (s *Service) UpdateChallenge(c *gin.Context) {
 		existing.MaxTurns = *req.MaxTurns
 	}
 	if req.AcceptanceCriteria != nil {
-		existing.AcceptanceCriteria = *req.AcceptanceCriteria
+		existing.AcceptanceCriteria = encodeJSON(*req.AcceptanceCriteria)
 	}
 	if req.ScoringWeights != nil {
-		existing.ScoringWeights = *req.ScoringWeights
+		existing.ScoringWeights = encodeJSON(*req.ScoringWeights)
 	}
 	if req.KnownIssues != nil {
-		existing.KnownIssues = *req.KnownIssues
+		existing.KnownIssues = encodeJSON(*req.KnownIssues)
 	}
 	if req.Tags != nil {
 		existing.Tags = *req.Tags
@@ -379,59 +376,61 @@ func (s *Service) ListTemplates(c *gin.Context) {
 // Request/Response types
 
 type CreateChallengeRequest struct {
-	Title                string                 `json:"title" binding:"required"`
-	Description          string                 `json:"description" binding:"required"`
-	RepositoryURL        string                 `json:"repository_url" binding:"required,url"`
-	RepositoryBranch     string                 `json:"repository_branch"`
-	TargetPaths          []string               `json:"target_paths" binding:"required,min=1"`
-	ExcludePaths         []string               `json:"exclude_paths"`
-	Severity             string                 `json:"severity" binding:"required,oneof=low medium high critical"`
-	Category             string                 `json:"category" binding:"required,oneof=security performance refactor testing documentation migration bugfix feature"`
-	TimeLimitSeconds     int                    `json:"time_limit_seconds"`
-	MaxTurns             int                    `json:"max_turns"`
-	AcceptanceCriteria   []AcceptanceCriterion  `json:"acceptance_criteria"`
-	ScoringWeights       map[string]float64     `json:"scoring_weights"`
-	KnownIssues          []KnownIssue           `json:"known_issues"`
-	Tags                 []string               `json:"tags"`
-	TemplateID           *uuid.UUID             `json:"template_id"`
-	IsPublic             bool                   `json:"is_public"`
+	Title              string                `json:"title" binding:"required"`
+	Description        string                `json:"description" binding:"required"`
+	RepositoryURL      string                `json:"repository_url" binding:"required,url"`
+	RepositoryBranch   string                `json:"repository_branch"`
+	TargetPaths        []string              `json:"target_paths" binding:"required,min=1"`
+	ExcludePaths       []string              `json:"exclude_paths"`
+	Severity           string                `json:"severity" binding:"required,oneof=low medium high critical"`
+	Category           string                `json:"category" binding:"required,oneof=security performance refactor testing documentation migration bugfix feature"`
+	TimeLimitSeconds   int                   `json:"time_limit_seconds"`
+	MaxTurns           int                   `json:"max_turns"`
+	AcceptanceCriteria []AcceptanceCriterion `json:"acceptance_criteria"`
+	ScoringWeights     map[string]float64    `json:"scoring_weights"`
+	KnownIssues        []KnownIssue          `json:"known_issues"`
+	Tags               []string              `json:"tags"`
+	TemplateID         *uuid.UUID            `json:"template_id"`
+	IsPublic           bool                  `json:"is_public"`
 }
 
 type UpdateChallengeRequest struct {
-	Title                *string                `json:"title"`
-	Description          *string                `json:"description"`
-	RepositoryURL        *string                `json:"repository_url"`
-	RepositoryBranch     *string                `json:"repository_branch"`
-	TargetPaths          *[]string              `json:"target_paths"`
-	ExcludePaths         *[]string              `json:"exclude_paths"`
-	Severity             *string                `json:"severity"`
-	Category             *string                `json:"category"`
-	TimeLimitSeconds     *int                   `json:"time_limit_seconds"`
-	MaxTurns             *int                   `json:"max_turns"`
-	AcceptanceCriteria   *[]AcceptanceCriterion `json:"acceptance_criteria"`
-	ScoringWeights       *map[string]float64    `json:"scoring_weights"`
-	KnownIssues          *[]KnownIssue          `json:"known_issues"`
-	Tags                 *[]string              `json:"tags"`
-	TemplateID           *uuid.UUID             `json:"template_id"`
-	IsPublic             *bool                  `json:"is_public"`
+	Title              *string                `json:"title"`
+	Description        *string                `json:"description"`
+	RepositoryURL      *string                `json:"repository_url"`
+	RepositoryBranch   *string                `json:"repository_branch"`
+	TargetPaths        *[]string              `json:"target_paths"`
+	ExcludePaths       *[]string              `json:"exclude_paths"`
+	Severity           *string                `json:"severity"`
+	Category           *string                `json:"category"`
+	TimeLimitSeconds   *int                   `json:"time_limit_seconds"`
+	MaxTurns           *int                   `json:"max_turns"`
+	AcceptanceCriteria *[]AcceptanceCriterion `json:"acceptance_criteria"`
+	ScoringWeights     *map[string]float64    `json:"scoring_weights"`
+	KnownIssues        *[]KnownIssue          `json:"known_issues"`
+	Tags               *[]string              `json:"tags"`
+	TemplateID         *uuid.UUID             `json:"template_id"`
+	IsPublic           *bool                  `json:"is_public"`
 }
 
 type AcceptanceCriterion struct {
-	ID              string                 `json:"id"`
-	Description     string                 `json:"description" binding:"required"`
-	Type            string                 `json:"type" binding:"required,oneof=test static_analysis metric manual"`
-	Weight          float64                `json:"weight" binding:"required,min=0,max=1"`
-	PassThreshold   float64                `json:"pass_threshold" binding:"required,min=0,max=1"`
-	Config          map[string]interface{} `json:"config"`
+	ID            string                 `json:"id"`
+	Description   string                 `json:"description" binding:"required"`
+	Type          string                 `json:"type" binding:"required,oneof=test static_analysis metric manual"`
+	Weight        float64                `json:"weight" binding:"required,min=0,max=1"`
+	PassThreshold float64                `json:"pass_threshold" binding:"required,min=0,max=1"`
+	Config        map[string]interface{} `json:"config"`
 }
 
 type KnownIssue struct {
-	File        string  `json:"file" binding:"required"`
-	Line        int     `json:"line" binding:"required,min=0"`
-	Column      *int    `json:"column"`
-	Issue       string  `json:"issue" binding:"required"`
-	Severity    string  `json:"severity" binding:"required,oneof=low medium high critical"`
-	Priority    string  `json:"priority" binding:"required,oneof=low medium high critical"`
-	CWEID       string  `json:"cwe_id"`
-	Description string  `json:"description"`
+	File        string `json:"file" binding:"required"`
+	Line        int    `json:"line" binding:"required,min=0"`
+	Column      *int   `json:"column"`
+	Issue       string `json:"issue" binding:"required"`
+	Severity    string `json:"severity" binding:"required,oneof=low medium high critical"`
+	Priority    string `json:"priority" binding:"required,oneof=low medium high critical"`
+	CWEID       string `json:"cwe_id"`
+	Description string `json:"description"`
 }
+
+func encodeJSON(v any) json.RawMessage { data, _ := json.Marshal(v); return data }

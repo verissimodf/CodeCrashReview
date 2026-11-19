@@ -28,6 +28,11 @@
 	$: if ($auth.isAuthenticated && !$stats.stats) {
 		loadStats();
 	}
+
+	import { Users } from 'lucide-svelte';
+	import { formatRating } from '$lib/utils';
+	import { getRatingTier } from '$lib/utils';
+	import { getRatingTier as getTier } from '$lib/utils';
 </script>
 
 <div class="space-y-6 animate-fade-in">
@@ -115,10 +120,3 @@
 		<ProfileStats stats={$stats.stats} />
 	{/if}
 </div>
-
-<script>
-	import { User, Trophy, Users, Settings } from 'lucide-svelte';
-	import { formatRating } from '$lib/utils';
-	import { getRatingTier } from '$lib/utils';
-	import { getRatingTier as getTier } from '$lib/utils';
-</script>

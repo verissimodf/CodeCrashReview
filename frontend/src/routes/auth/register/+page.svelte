@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { auth } from '$lib/stores';
 	import { goto } from '$app/navigation';
-	import { Mail, Lock, User, AlertCircle, CheckCircle, Loader2, Eye, EyeOff } from 'lucide-svelte';
+	import { Code, Mail, Lock, User, AlertCircle, CheckCircle, Loader2, Eye, EyeOff } from 'lucide-svelte';
 
 	let username = '';
 	let email = '';
@@ -72,7 +72,7 @@
 
 		try {
 			await auth.register(username, email, password);
-			await goto('/');
+			await goto('/arena');
 		} catch (err: any) {
 			error = err.message || 'Erro ao registrar';
 		} finally {
@@ -154,7 +154,7 @@
 						<input
 							type={showPassword ? 'text' : 'password'}
 							id="password"
-							bind:value={password}
+							value={password} on:input={event => password = event.currentTarget.value}
 							class="input pl-10 pr-10"
 							placeholder="••••••••"
 							autocomplete="new-password"
@@ -165,7 +165,7 @@
 							class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neon-cyan"
 							on:click={() => showPassword = !showPassword}
 						>
-							{showPassword ? <EyeOff class="w-5 h-5" /> : <Eye class="w-5 h-5" />}
+							{#if showPassword}<EyeOff class="w-5 h-5" />{:else}<Eye class="w-5 h-5" />{/if}
 						</button>
 					</div>
 					{#if passwordError}
@@ -183,7 +183,7 @@
 						<input
 							type={showPassword ? 'text' : 'password'}
 							id="confirmPassword"
-							bind:value={confirmPassword}
+							value={confirmPassword} on:input={event => confirmPassword = event.currentTarget.value}
 							class="input pl-10"
 							placeholder="••••••••"
 							autocomplete="new-password"
@@ -211,14 +211,12 @@
 					class="btn-primary btn-lg w-full"
 					disabled={loading}
 				>
-					{loading ? (
-						<>
-							<Loader2 class="w-5 h-5 mr-2 animate-spin" />
+					{#if loading}
+						<Loader2 class="w-5 h-5 mr-2 animate-spin" />
 							Criando conta...
-						</>
-					) : (
-						'Criar Conta'
-					)}
+					{:else}
+						Criar Conta
+					{/if}
 				</button>
 			</form>
 

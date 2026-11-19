@@ -1,0 +1,81 @@
+name: codecrashreview
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [data]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?}"]
+    volumes:
+      - redisdata:/data
+    networks: [data]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  backend:
+    build:
+      context: ./backend
+      target: production
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:?}
+      FREELLM_BASE_URL: http://127.0.0.1:8082/v1
+      FREELLM_UNIX_SOCKET: /run/codecrash/freellm.sock
+      FREELLM_API_KEY: ${FREELLM_API_KEY:?}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:?}
+      GIN_MODE: release
+    volumes:
+      - ${HOME}/.local/share/codecrashreview/proxy:/run/codecrash:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [data, app]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    restart: unless-stopped
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    depends_on:
+      backend: {condition: service_healthy}
+    networks:
+      app:
+      ingress:
+        aliases: [codecrash-frontend]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    restart: unless-stopped
+networks:
+  data: {internal: true}
+  app: {}
+  ingress: {external: true, name: CNC_APP_PROD_01}
+volumes:
+  pgdata: {}
+  redisdata: {}

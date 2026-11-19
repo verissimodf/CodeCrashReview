@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Star } from "lucide-svelte";
 	import { cn } from '$lib/utils';
 	import { getSeverityColor, getCategoryIcon, formatRelativeTime } from '$lib/utils';
 	import { Shield, Zap, Code2, CheckCircle2, BookOpen, GitBranch, Bug, Sparkles, Clock, ArrowRight, ExternalLink } from 'lucide-svelte';
@@ -139,6 +140,3 @@
 	</div>
 </div>
 
-<script>
-	import { Star } from 'lucide-svelte';
-</script>

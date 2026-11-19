@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+
 	"strings"
 	"time"
 
@@ -13,7 +13,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
-	"github.com/google/uuid"
+
 	"github.com/rs/zerolog"
 
 	"codecrashreview/backend/internal/config"
@@ -51,9 +51,9 @@ type ExecutionRequest struct {
 }
 
 type ResourceLimits struct {
-	CPUSeconds   int
-	MemoryBytes  int64
-	OutputBytes  int64
+	CPUSeconds  int
+	MemoryBytes int64
+	OutputBytes int64
 }
 
 type CodeFile struct {
@@ -64,13 +64,13 @@ type CodeFile struct {
 }
 
 type ExecutionResult struct {
-	ExitCode      int
-	Stdout        string
-	Stderr        string
-	DurationMs    int64
-	MemoryUsed    int64
-	TimedOut      bool
-	OOMKilled     bool
+	ExitCode   int
+	Stdout     string
+	Stderr     string
+	DurationMs int64
+	MemoryUsed int64
+	TimedOut   bool
+	OOMKilled  bool
 }
 
 var languageImages = map[string]string{
@@ -120,7 +120,7 @@ func NewSandboxManager(cfg *config.Config) (*SandboxManager, error) {
 	return &SandboxManager{
 		dockerClient: cli,
 		config:       cfg,
-		logger:       zerolog.DefaultContextLogger,
+		logger:       *zerolog.Ctx(context.Background()),
 		images:       languageImages,
 	}, nil
 }
@@ -198,13 +198,13 @@ func (s *SandboxManager) Execute(ctx context.Context, req *ExecutionRequest) (*E
 	oomKilled := exitCode == 137 // SIGKILL
 
 	return &ExecutionResult{
-		ExitCode:     int(exitCode),
-		Stdout:       stdout,
-		Stderr:       stderr,
-		DurationMs:   duration.Milliseconds(),
-		MemoryUsed:   memUsed,
-		TimedOut:     timedOut,
-		OOMKilled:    oomKilled,
+		ExitCode:   int(exitCode),
+		Stdout:     stdout,
+		Stderr:     stderr,
+		DurationMs: duration.Milliseconds(),
+		MemoryUsed: memUsed,
+		TimedOut:   timedOut,
+		OOMKilled:  oomKilled,
 	}, nil
 }
 
@@ -224,7 +224,7 @@ func (s *SandboxManager) createContainer(ctx context.Context, imageName string, 
 	hostConfig := &container.HostConfig{
 		NetworkMode: container.NetworkMode(s.config.SandboxNetwork),
 		Resources: container.Resources{
-			CPUQuota: int64(s.config.SandboxCPULimit * 100000),
+			CPUQuota:  int64(s.config.SandboxCPULimit * 100000),
 			CPUPeriod: 100000,
 			Memory:    parseMemoryLimit(s.config.SandboxMemoryLimit),
 			PidsLimit: &s.config.SandboxPIDsLimit,
@@ -398,7 +398,7 @@ func (s *SandboxManager) getContainerMemoryUsage(ctx context.Context, containerI
 }
 
 func (s *SandboxManager) PrewarmContainers(ctx context.Context) error {
-	for lang, imageName := range s.images {
+	for _, imageName := range s.images {
 		// Pull image if not present
 		_, _, err := s.dockerClient.ImageInspectWithRaw(ctx, imageName)
 		if err != nil {

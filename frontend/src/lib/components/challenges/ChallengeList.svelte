@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { cn } from '$lib/utils';
-	import { ChallengeCard } from './ChallengeCard.svelte';
+	import ChallengeCard from './ChallengeCard.svelte';
 	import { Filter, Search, ChevronDown, Plus, Loader2 } from 'lucide-svelte';
-	import { Dropdown } from '$lib/components/ui';
+	import { Dropdown, Input } from '$lib/components/ui';
 
 	export let challenges: any[] = [];
 	export let loading = false;
@@ -41,7 +41,7 @@
 		{ value: 'title', label: 'Nome (A-Z)' }
 	];
 
-	let filteredChallenges = $derived(
+	$: filteredChallenges = (
 		challenges
 			.filter(c => {
 				if (searchQuery && !c.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -85,7 +85,7 @@
 			<button class="btn-secondary {showFilters ? 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30' : ''}" on:click={() => showFilters = !showFilters}>
 				<Filter class="w-5 h-5 mr-2" />
 				Filtros
-				{/* Active filter indicator */}
+				
 				{#if selectedCategory || selectedSeverity || searchQuery}
 					<span class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-neon-cyan/20 text-neon-cyan">
 						{(selectedCategory ? 1 : 0) + (selectedSeverity ? 1 : 0) + (searchQuery ? 1 : 0)}

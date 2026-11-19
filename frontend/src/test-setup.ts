@@ -1,5 +1,5 @@
 // Vitest test setup
-import { vi } from 'vitest';
+import { vi, beforeAll, afterAll } from 'vitest';
 
 // Mock WebSocket
 global.WebSocket = vi.fn().mockImplementation(() => ({

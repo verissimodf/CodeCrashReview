@@ -85,6 +85,8 @@
 	function handleCancel() {
 		goTo('/challenges');
 	}
+
+
 </script>
 
 <div class="max-w-4xl mx-auto">
@@ -108,7 +110,3 @@
 		loading={submitting}
 	/>
 </div>
-
-<script>
-	import { ArrowLeft } from 'lucide-svelte';
-</script>

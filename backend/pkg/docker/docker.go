@@ -7,15 +7,17 @@ import (
 	"io"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/rs/zerolog"
 )
 
 type Client struct {
-	cli   *client.Client
-	log   zerolog.Logger
+	cli     *client.Client
+	log     zerolog.Logger
 	timeout time.Duration
 }
 
@@ -37,7 +39,7 @@ func NewClient(timeout time.Duration) (*Client, error) {
 
 	return &Client{
 		cli:     cli,
-		log:     zerolog.DefaultContextLogger,
+		log:     *zerolog.Ctx(context.Background()),
 		timeout: timeout,
 	}, nil
 }
@@ -204,14 +206,14 @@ func (c *Client) GetContainerStats(ctx context.Context, containerID string) (*Co
 		} `json:"memory_stats"`
 		CPUStats struct {
 			CPUUsage struct {
-				TotalUsage  uint64 `json:"total_usage"`
+				TotalUsage  uint64   `json:"total_usage"`
 				PercpuUsage []uint64 `json:"percpu_usage"`
 			} `json:"cpu_usage"`
 			SystemCPUUsage uint64 `json:"system_cpu_usage"`
 		} `json:"cpu_stats"`
 		PreCPUStats struct {
 			CPUUsage struct {
-				TotalUsage  uint64 `json:"total_usage"`
+				TotalUsage  uint64   `json:"total_usage"`
 				PercpuUsage []uint64 `json:"percpu_usage"`
 			} `json:"cpu_usage"`
 			SystemCPUUsage uint64 `json:"system_cpu_usage"`
@@ -240,18 +242,18 @@ func (c *Client) Close() error {
 }
 
 // ListContainers lists containers with optional filters
-func (c *Client) ListContainers(ctx context.Context, all bool) ([]container.Summary, error) {
+func (c *Client) ListContainers(ctx context.Context, all bool) ([]types.Container, error) {
 	return c.cli.ContainerList(ctx, container.ListOptions{All: all})
 }
 
 // Prune removes unused containers, networks, images
 func (c *Client) Prune(ctx context.Context) error {
 	// Container prune
-	_, err := c.cli.ContainersPrune(ctx, container.PruneOptions{})
+	_, err := c.cli.ContainersPrune(ctx, filters.NewArgs())
 	if err != nil {
 		return err
 	}
 	// Image prune
-	_, err = c.cli.ImagesPrune(ctx, image.PruneOptions{})
+	_, err = c.cli.ImagesPrune(ctx, filters.NewArgs())
 	return err
 }

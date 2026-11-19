@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import type { HTMLInputAttributes, HTMLTextareaAttributes, HTMLSelectAttributes } from 'svelte/elements';
+
 
 	export let label: string;
 	export let error: string;
@@ -17,7 +17,6 @@
 	export let as: 'input' | 'textarea' | 'select' = 'input';
 	export let options: { value: string; label: string }[] = [];
 
-	$$restProps: HTMLInputAttributes | HTMLTextareaAttributes | HTMLSelectAttributes;
 
 	const inputId = id || name || `input-${Math.random().toString(36).substr(2, 9)}`;
 	const errorId = error ? `${inputId}-error` : undefined;

@@ -2,9 +2,8 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -16,24 +15,24 @@ import (
 )
 
 type AgentPersona struct {
-	ID          string
-	Name        string
-	Description string
-	Specialty   string
-	Model       string
-	Temperature float64
-	Tools       []string
+	ID           string
+	Name         string
+	Description  string
+	Specialty    string
+	Model        string
+	Temperature  float64
+	Tools        []string
 	SystemPrompt string
-	Color       string
-	GlowColor   string
-	Icon        string
+	Color        string
+	GlowColor    string
+	Icon         string
 }
 
 type Agent struct {
-	Persona   *AgentPersona
-	Client    *freellm.Client
-	Sandbox   *sandbox.SandboxManager
-	Logger    zerolog.Logger
+	Persona *AgentPersona
+	Client  *freellm.Client
+	Sandbox *sandbox.SandboxManager
+	Logger  zerolog.Logger
 }
 
 type AgentAction struct {
@@ -43,15 +42,15 @@ type AgentAction struct {
 }
 
 type AgentState struct {
-	Persona       string
-	Status        string
-	CurrentFile   string
-	CurrentLine   int
-	Progress      int
-	TokensUsed    int
-	LatencyMs     int64
-	LastAction    string
-	Thoughts      []string
+	Persona         string
+	Status          string
+	CurrentFile     string
+	CurrentLine     int
+	Progress        int
+	TokensUsed      int
+	LatencyMs       int64
+	LastAction      string
+	Thoughts        []string
 	ProposedChanges []CodeChange
 }
 
@@ -69,17 +68,17 @@ type CodeChange struct {
 }
 
 type DiffHunk struct {
-	OldStart  int
-	OldLines  int
-	NewStart  int
-	NewLines  int
-	Lines     []DiffLine
+	OldStart int
+	OldLines int
+	NewStart int
+	NewLines int
+	Lines    []DiffLine
 }
 
 type DiffLine struct {
-	Type        string
-	Content     string
-	LineNumber  int
+	Type       string
+	Content    string
+	LineNumber int
 }
 
 // Default agent personas
@@ -342,8 +341,12 @@ func GetPersona(id string) *AgentPersona {
 }
 
 func NewAgent(persona *AgentPersona, client *freellm.Client, sandbox *sandbox.SandboxManager) *Agent {
+	configuredPersona := *persona
+	if model := os.Getenv("DEFAULT_MODEL"); model != "" {
+		configuredPersona.Model = model
+	}
 	return &Agent{
-		Persona: persona,
+		Persona: &configuredPersona,
 		Client:  client,
 		Sandbox: sandbox,
 		Logger:  zerolog.DefaultContextLogger.With().Str("agent", persona.ID).Logger(),
@@ -423,7 +426,7 @@ func (a *Agent) buildContext(challenge *Challenge, files map[string]string, turn
 	if len(previousChanges) > 0 {
 		b.WriteString("## Previous Changes:\n")
 		for _, change := range previousChanges {
-			b.WriteString(fmt.Sprintf("- Turn %d by %s: %s\n", change.Turn, change.AgentPersona, change.Description))
+			b.WriteString(fmt.Sprintf("- Turn %d by %s: %s\n", change.Turn, a.Persona.ID, change.Description))
 		}
 		b.WriteString("\n")
 	}
@@ -446,7 +449,7 @@ func (a *Agent) getTools() []freellm.Tool {
 					"type": "object",
 					"properties": map[string]interface{}{
 						"target": map[string]interface{}{
-							"type": "string",
+							"type":        "string",
 							"description": "File or directory to analyze",
 						},
 					},
@@ -467,18 +470,14 @@ func (a *Agent) parseResponse(content string) ([]CodeChange, []string) {
 	// Simple parsing for demo
 	lines := strings.Split(content, "\n")
 	inThoughts := false
-	inCode := false
 	currentThought := ""
-	currentCode := ""
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "THOUGHT:") {
 			inThoughts = true
-			inCode = false
 			currentThought = strings.TrimPrefix(line, "THOUGHT:")
 			thoughts = append(thoughts, strings.TrimSpace(currentThought))
 		} else if strings.HasPrefix(line, "CODE_CHANGE:") {
-			inCode = true
 			inThoughts = false
 			// Parse code change directive
 		} else if inThoughts && line != "" {
@@ -504,24 +503,24 @@ type AgentResult struct {
 }
 
 type Challenge struct {
-	ID                   uuid.UUID
-	Title                string
-	Description          string
-	Severity             string
-	Category             string
-	TimeLimitSeconds     int
-	MaxTurns             int
-	AcceptanceCriteria   []AcceptanceCriterion
-	ScoringWeights       map[string]float64
-	KnownIssues          []KnownIssue
+	ID                 uuid.UUID
+	Title              string
+	Description        string
+	Severity           string
+	Category           string
+	TimeLimitSeconds   int
+	MaxTurns           int
+	AcceptanceCriteria []AcceptanceCriterion
+	ScoringWeights     map[string]float64
+	KnownIssues        []KnownIssue
 }
 
 type AcceptanceCriterion struct {
-	ID              string
-	Description     string
-	Type            string
-	Weight          float64
-	PassThreshold   float64
+	ID            string
+	Description   string
+	Type          string
+	Weight        float64
+	PassThreshold float64
 }
 
 type KnownIssue struct {

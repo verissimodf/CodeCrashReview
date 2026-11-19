@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/jackc/pgx/v5/stdlib"
 	"log"
-	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
 
 	"codecrashreview/backend/internal/config"
-	_ "codecrashreview/backend/internal/database/migrations"
 )
 
 func main() {
@@ -29,12 +28,8 @@ func main() {
 	defer pool.Close()
 
 	// Get standard database connection for goose
-	db, err := pool.Acquire(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to acquire connection: %v", err)
-	}
-	defer db.Release()
-
+	db := stdlib.OpenDBFromPool(pool)
+	defer db.Close()
 	// Set goose dialect
 	if err := goose.SetDialect("postgres"); err != nil {
 		log.Fatalf("Failed to set dialect: %v", err)
@@ -43,26 +38,26 @@ func main() {
 	// Run goose command
 	switch *command {
 	case "up":
-		if err := goose.Up(db.Conn(), *dir); err != nil {
+		if err := goose.Up(db, *dir); err != nil {
 			log.Fatalf("Failed to run migrations up: %v", err)
 		}
 		log.Println("Migrations applied successfully")
 	case "down":
-		if err := goose.Down(db.Conn(), *dir); err != nil {
+		if err := goose.Down(db, *dir); err != nil {
 			log.Fatalf("Failed to run migrations down: %v", err)
 		}
 		log.Println("Migration rolled back successfully")
 	case "reset":
-		if err := goose.Reset(db.Conn(), *dir); err != nil {
+		if err := goose.Reset(db, *dir); err != nil {
 			log.Fatalf("Failed to reset migrations: %v", err)
 		}
 		log.Println("Migrations reset successfully")
 	case "status":
-		if err := goose.Status(db.Conn(), *dir); err != nil {
+		if err := goose.Status(db, *dir); err != nil {
 			log.Fatalf("Failed to get migration status: %v", err)
 		}
 	case "version":
-		if err := goose.Version(db.Conn(), *dir); err != nil {
+		if err := goose.Version(db, *dir); err != nil {
 			log.Fatalf("Failed to get migration version: %v", err)
 		}
 	default:
