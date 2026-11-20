@@ -1,0 +1,197 @@
+{
+  "version": "0.2.0",
+  "date": "2026-11-20",
+  "build_source_commit": "9bb25b59164909b94927839cd1441ccc89c41b6b",
+  "review_id": "4802ee58-ad7e-4f5b-9d01-9a642907b683",
+  "source_kind": "explicit local reproduction of formerly invalid proposal",
+  "snapshot_sha": "c71db784e3881027fbecf1aa4c04204a82efd573",
+  "status": "completed",
+  "verdict": {
+    "model": "claude-3-freellm-no-thinking/ollama/qwen2.5:7b",
+    "scores": {
+      "A": {
+        "total": 6,
+        "evidence": 1,
+        "security": 1,
+        "efficiency": 1,
+        "correctness": 1,
+        "reliability": 1,
+        "maintainability": 1
+      },
+      "B": {
+        "total": 6,
+        "evidence": 1,
+        "security": 1,
+        "efficiency": 1,
+        "correctness": 1,
+        "reliability": 1,
+        "maintainability": 1
+      }
+    },
+    "winner": "A",
+    "rationale": "Both proposals address the same issue, but Proposal A directly removes the erroneous sign comparison, while Proposal B also corrects the evaluation logic but includes unnecessary wording. Proposal A is more precise and aligns better with the objective of fixing the specific issue without additional, unneeded text.",
+    "created_at": "2026-11-20T21:17:17.852382+00:00",
+    "evaluator_type": "ai"
+  },
+  "evaluation_attempts": [
+    {
+      "error": "judge selected an invalid winner",
+      "model": "claude-3-freellm-no-thinking/ollama/qwen2.5:7b",
+      "attempt": 1,
+      "response": "{\n  \"winner\": \"A|B|TIE\",\n  \"rationale\": \"Both proposals address the same issue and provide the same minimal edit to the grade function. Proposal A and B are equally valid and effective in fixing the problem. However, since both proposals are identical in content and impact, they can be considered equivalent in this context.\",\n  \"scores\": {\n    \"A\": {\n      \"correctness\": 1,\n      \"security\": 1,\n      \"maintainability\": 1,\n      \"reliability\": 1,\n      \"efficiency\": 1,\n      \"evidence\": 1,\n      \"total\": 6\n    },\n    \"B\": {\n      \"correctness\": 1,\n      \"security\": 1,\n      \"maintainability\": 1,\n      \"reliability\": 1,\n      \"efficiency\": 1,\n      \"evidence\": 1,\n      \"total\": 6\n    }\n  }\n}"
+    },
+    {
+      "error": "",
+      "model": "claude-3-freellm-no-thinking/ollama/qwen2.5:7b",
+      "attempt": 2,
+      "response": "{\n  \"winner\": \"A\",\n  \"rationale\": \"Both proposals address the same issue, but Proposal A directly removes the erroneous sign comparison, while Proposal B also corrects the evaluation logic but includes unnecessary wording. Proposal A is more precise and aligns better with the objective of fixing the specific issue without additional, unneeded text.\",\n  \"scores\": {\n    \"A\": {\n      \"correctness\": 1,\n      \"security\": 1,\n      \"maintainability\": 1,\n      \"reliability\": 1,\n      \"efficiency\": 1,\n      \"evidence\": 1,\n      \"total\": 6\n    },\n    \"B\": {\n      \"correctness\": 1,\n      \"security\": 1,\n      \"maintainability\": 1,\n      \"reliability\": 1,\n      \"efficiency\": 1,\n      \"evidence\": 1,\n      \"total\": 6\n    }\n  }\n}"
+    }
+  ],
+  "proposals": [
+    {
+      "slot": "A",
+      "model": "claude-3-freellm-no-thinking/ollama/qwen2.5:7b",
+      "patch": "diff --git a/backend/internal/arena/grade.go b/backend/internal/arena/grade.go\nindex a82e4e8..72fe262 100644\n--- a/backend/internal/arena/grade.go\n+++ b/backend/internal/arena/grade.go\n@@ -130,7 +130,7 @@ func grade(code string, cases [][3]int64) (result, error) {\n \t\tif e != nil {\n \t\t\treturn result{}, e\n \t\t}\n-\t\tif v.Cmp(big.NewInt(c[2])) == 0 && c[2].Sign() == 1 {\n+\t\tif v.Cmp(big.NewInt(c[2])) == 0 {\n \t\t\tpassed++\n \t\t}\n \t}",
+      "verification": {
+        "proof": {
+          "image": "golang@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab",
+          "output": "=== RUN   TestGradeAcceptance\n=== RUN   TestGradeAcceptance/signs_and_zero\n=== RUN   TestGradeAcceptance/partial\n=== RUN   TestGradeAcceptance/wrong\n=== RUN   TestGradeAcceptance/large_intermediate\n=== RUN   TestGradeAcceptance/absolute\n=== RUN   TestGradeAcceptance/minimum\n=== RUN   TestGradeAcceptance/maximum\n=== RUN   TestGradeAcceptance/function\n--- PASS: TestGradeAcceptance (0.00s)\n    --- PASS: TestGradeAcceptance/signs_and_zero (0.00s)\n    --- PASS: TestGradeAcceptance/partial (0.00s)\n    --- PASS: TestGradeAcceptance/wrong (0.00s)\n    --- PASS: TestGradeAcceptance/large_intermediate (0.00s)\n    --- PASS: TestGradeAcceptance/absolute (0.00s)\n    --- PASS: TestGradeAcceptance/minimum (0.00s)\n    --- PASS: TestGradeAcceptance/maximum (0.00s)\n    --- PASS: TestGradeAcceptance/function (0.00s)\n=== RUN   TestGradeRejectsInvalidInput\n--- PASS: TestGradeRejectsInvalidInput (0.00s)\nPASS\nok  \tcommand-line-arguments\t0.002s\n",
+          "passed": true,
+          "profile": "arena-grade-v1",
+          "exit_code": 0,
+          "tests_sha256": "c164783b3a607dd396c5a28ce68df7ef53c7d3a5345f758116c45c0308acb6c0",
+          "source_sha256": "a37cf4f0c00ac765e8986225152bbb15dd007085235153578d68640e36214a3e"
+        },
+        "quality_state": "functional_validation_passed",
+        "system_evidence": [
+          "Patch applicability verified against snapshot.",
+          "Isolated Go compilation and trusted arena-grade-v1 acceptance suite executed; see attached proof."
+        ],
+        "patch_applicable": true,
+        "unsupported_claims": [
+          "Manual code review and test case validation",
+          "The modified code will pass all existing test cases and handle zero and negative results correctly."
+        ],
+        "exact_edits_verified": true,
+        "functional_tests_run": true
+      }
+    },
+    {
+      "slot": "B",
+      "model": "claude-3-freellm-no-thinking/ollama/qwen2.5:7b",
+      "patch": "diff --git a/backend/internal/arena/grade.go b/backend/internal/arena/grade.go\nindex a82e4e8..72fe262 100644\n--- a/backend/internal/arena/grade.go\n+++ b/backend/internal/arena/grade.go\n@@ -130,7 +130,7 @@ func grade(code string, cases [][3]int64) (result, error) {\n \t\tif e != nil {\n \t\t\treturn result{}, e\n \t\t}\n-\t\tif v.Cmp(big.NewInt(c[2])) == 0 && c[2].Sign() == 1 {\n+\t\tif v.Cmp(big.NewInt(c[2])) == 0 {\n \t\t\tpassed++\n \t\t}\n \t}",
+      "verification": {
+        "proof": {
+          "image": "golang@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab",
+          "output": "=== RUN   TestGradeAcceptance\n=== RUN   TestGradeAcceptance/signs_and_zero\n=== RUN   TestGradeAcceptance/partial\n=== RUN   TestGradeAcceptance/wrong\n=== RUN   TestGradeAcceptance/large_intermediate\n=== RUN   TestGradeAcceptance/absolute\n=== RUN   TestGradeAcceptance/minimum\n=== RUN   TestGradeAcceptance/maximum\n=== RUN   TestGradeAcceptance/function\n--- PASS: TestGradeAcceptance (0.00s)\n    --- PASS: TestGradeAcceptance/signs_and_zero (0.00s)\n    --- PASS: TestGradeAcceptance/partial (0.00s)\n    --- PASS: TestGradeAcceptance/wrong (0.00s)\n    --- PASS: TestGradeAcceptance/large_intermediate (0.00s)\n    --- PASS: TestGradeAcceptance/absolute (0.00s)\n    --- PASS: TestGradeAcceptance/minimum (0.00s)\n    --- PASS: TestGradeAcceptance/maximum (0.00s)\n    --- PASS: TestGradeAcceptance/function (0.00s)\n=== RUN   TestGradeRejectsInvalidInput\n--- PASS: TestGradeRejectsInvalidInput (0.00s)\nPASS\nok  \tcommand-line-arguments\t0.003s\n",
+          "passed": true,
+          "profile": "arena-grade-v1",
+          "exit_code": 0,
+          "tests_sha256": "c164783b3a607dd396c5a28ce68df7ef53c7d3a5345f758116c45c0308acb6c0",
+          "source_sha256": "a37cf4f0c00ac765e8986225152bbb15dd007085235153578d68640e36214a3e"
+        },
+        "quality_state": "functional_validation_passed",
+        "system_evidence": [
+          "Patch applicability verified against snapshot.",
+          "Isolated Go compilation and trusted arena-grade-v1 acceptance suite executed; see attached proof."
+        ],
+        "patch_applicable": true,
+        "unsupported_claims": [
+          "Revised code will be tested against the existing test cases to ensure full coverage"
+        ],
+        "exact_edits_verified": true,
+        "functional_tests_run": true
+      }
+    }
+  ],
+  "regression_proofs": {
+    "original_invalid_winner": {
+      "profile": "arena-grade-v1",
+      "passed": false,
+      "exit_code": 1,
+      "source_sha256": "415c42b4da48ab9e325790fa93f7ce8b3e284b47bfadab0009c418466543c63c",
+      "tests_sha256": "c164783b3a607dd396c5a28ce68df7ef53c7d3a5345f758116c45c0308acb6c0",
+      "image": "golang@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab",
+      "output": "# command-line-arguments [command-line-arguments.test]\n/proof/grade.go:133:43: c[2].Sign undefined (type int64 has no field or method Sign)\nFAIL\tcommand-line-arguments [build failed]\nFAIL\n"
+    },
+    "compilable_sign_regression": {
+      "profile": "arena-grade-v1",
+      "passed": false,
+      "exit_code": 1,
+      "source_sha256": "f0137145a5e5cb4af43b678dc7af0a50b5f1bd8990d7504b6fc0ab1c88ed805e",
+      "tests_sha256": "c164783b3a607dd396c5a28ce68df7ef53c7d3a5345f758116c45c0308acb6c0",
+      "image": "golang@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab",
+      "output": "=== RUN   TestGradeAcceptance\n=== RUN   TestGradeAcceptance/signs_and_zero\n    grade_test.go:26: score=33 err=<nil>; want 100\n=== RUN   TestGradeAcceptance/partial\n=== RUN   TestGradeAcceptance/wrong\n=== RUN   TestGradeAcceptance/large_intermediate\n    grade_test.go:26: score=50 err=<nil>; want 100\n=== RUN   TestGradeAcceptance/absolute\n    grade_test.go:26: score=50 err=<nil>; want 100\n=== RUN   TestGradeAcceptance/minimum\n    grade_test.go:26: score=0 err=<nil>; want 100\n=== RUN   TestGradeAcceptance/maximum\n=== RUN   TestGradeAcceptance/function\n--- FAIL: TestGradeAcceptance (0.00s)\n    --- FAIL: TestGradeAcceptance/signs_and_zero (0.00s)\n    --- PASS: TestGradeAcceptance/partial (0.00s)\n    --- PASS: TestGradeAcceptance/wrong (0.00s)\n    --- FAIL: TestGradeAcceptance/large_intermediate (0.00s)\n    --- FAIL: TestGradeAcceptance/absolute (0.00s)\n    --- FAIL: TestGradeAcceptance/minimum (0.00s)\n    --- PASS: TestGradeAcceptance/maximum (0.00s)\n    --- PASS: TestGradeAcceptance/function (0.00s)\n=== RUN   TestGradeRejectsInvalidInput\n--- PASS: TestGradeRejectsInvalidInput (0.00s)\nFAIL\nFAIL\tcommand-line-arguments\t0.005s\nFAIL\n"
+    },
+    "correct_grading": {
+      "profile": "arena-grade-v1",
+      "passed": true,
+      "exit_code": 0,
+      "source_sha256": "a37cf4f0c00ac765e8986225152bbb15dd007085235153578d68640e36214a3e",
+      "tests_sha256": "c164783b3a607dd396c5a28ce68df7ef53c7d3a5345f758116c45c0308acb6c0",
+      "image": "golang@sha256:ecb67f987aa1a57794c91d19ade7ae0209f2f0f5496aaef9e6ae85ddf92d02ab",
+      "output": "=== RUN   TestGradeAcceptance\n=== RUN   TestGradeAcceptance/signs_and_zero\n=== RUN   TestGradeAcceptance/partial\n=== RUN   TestGradeAcceptance/wrong\n=== RUN   TestGradeAcceptance/large_intermediate\n=== RUN   TestGradeAcceptance/absolute\n=== RUN   TestGradeAcceptance/minimum\n=== RUN   TestGradeAcceptance/maximum\n=== RUN   TestGradeAcceptance/function\n--- PASS: TestGradeAcceptance (0.00s)\n    --- PASS: TestGradeAcceptance/signs_and_zero (0.00s)\n    --- PASS: TestGradeAcceptance/partial (0.00s)\n    --- PASS: TestGradeAcceptance/wrong (0.00s)\n    --- PASS: TestGradeAcceptance/large_intermediate (0.00s)\n    --- PASS: TestGradeAcceptance/absolute (0.00s)\n    --- PASS: TestGradeAcceptance/minimum (0.00s)\n    --- PASS: TestGradeAcceptance/maximum (0.00s)\n    --- PASS: TestGradeAcceptance/function (0.00s)\n=== RUN   TestGradeRejectsInvalidInput\n--- PASS: TestGradeRejectsInvalidInput (0.00s)\nPASS\nok  \tcommand-line-arguments\t0.002s\n"
+    }
+  },
+  "access_checks": {
+    "anonymous_reviews": {
+      "actual": 401,
+      "expected": 401
+    },
+    "other_owner_cannot_read": {
+      "actual": 404,
+      "expected": 404
+    },
+    "other_owner_cannot_decide": {
+      "actual": 409,
+      "expected": 409
+    },
+    "other_owner_list_empty": {
+      "actual": 0,
+      "expected": 0
+    },
+    "absolute_focus": {
+      "actual": 400,
+      "expected": 400
+    },
+    "traversal_focus": {
+      "actual": 400,
+      "expected": 400
+    },
+    "incompatible_specialty": {
+      "actual": 400,
+      "expected": 400
+    },
+    "duplicate_agents": {
+      "actual": 400,
+      "expected": 400
+    },
+    "non_github_source": {
+      "actual": 400,
+      "expected": 400
+    }
+  },
+  "browser": {
+    "review_id": "4802ee58-ad7e-4f5b-9d01-9a642907b683",
+    "login": true,
+    "evidence_visible": true,
+    "patch_download": true,
+    "mobile_no_overflow": true,
+    "javascript_errors": []
+  },
+  "migration_restore": {
+    "historical_verdicts_preserved": 2,
+    "validated_review_retained": 1
+  },
+  "images": {
+    "backend": "sha256:c977f574aba8cc3991be9fa00b8c988264fdf5b8b968ebb782d21de2db0a2471",
+    "frontend": "sha256:6f8b37ff647480618fdfb71acbdc3482cc9214c904a32c662219cfe173648394",
+    "validator": "sha256:2826055104ed003fa75a7837b6603cbb035ca388d6a78c35080c9bdf367b2ea6"
+  },
+  "ci": "https://github.com/verissimodf/CodeCrashReview/actions/runs/44818687277",
+  "scope_limitations": [
+    "Executable acceptance profile covers arena grading only.",
+    "General repositories require additional trusted acceptance profiles.",
+    "UI exports the winning patch; automatic publication/deployment of arbitrary proposals is not implemented."
+  ]
+}
