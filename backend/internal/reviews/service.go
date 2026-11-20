@@ -357,51 +357,7 @@ func (s *Service) evaluate(ctx context.Context, job claimedReview, proposals []p
 	if len(proposals) != 2 || (!proposalApproved(proposals[0]) && !proposalApproved(proposals[1])) {
 		return Verdict{}, errors.New("neither proposal has passed independent functional validation; no automatic winner is allowed")
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"objective": job.Objective, "review_focus": job.ReviewFocus,
-		"proposal_a": map[string]any{
-			"persona": proposals[0].Persona, "summary": proposals[0].Proposal.Summary,
-			"findings": proposals[0].Proposal.Findings, "patch_excerpt": truncateForJudge(proposals[0].Proposal.Patch),
-			"delivery":     proposals[0].Proposal.Delivery,
-			"verification": proposals[0].Verification,
-			"patch_valid":  proposals[0].PatchValid, "validation_error": proposals[0].ValidationError,
-		},
-		"proposal_b": map[string]any{
-			"persona": proposals[1].Persona, "summary": proposals[1].Proposal.Summary,
-			"findings": proposals[1].Proposal.Findings, "patch_excerpt": truncateForJudge(proposals[1].Proposal.Patch),
-			"delivery":     proposals[1].Proposal.Delivery,
-			"verification": proposals[1].Verification,
-			"patch_valid":  proposals[1].PatchValid, "validation_error": proposals[1].ValidationError,
-		},
-	})
-	response, err := s.llm.ChatCompletion(ctx, &freellm.ChatRequest{
-		Model: s.model, Temperature: 0.1, MaxTokens: 900,
-		ResponseFormat: map[string]any{"type": "json_object"},
-		Messages: []freellm.ChatMessage{
-			{Role: "system", Content: judgeSystemPrompt},
-			{Role: "user", Content: string(payload)},
-		},
-	})
-	if err != nil {
-		return Verdict{}, err
-	}
-	if len(response.Choices) == 0 {
-		return Verdict{}, errors.New("judge returned no choices")
-	}
-	verdict, err := parseVerdict(response.Choices[0].Message.Content)
-	if err != nil {
-		return Verdict{}, err
-	}
-	if proposalApproved(proposals[0]) != proposalApproved(proposals[1]) {
-		validWinner := "A"
-		if proposalApproved(proposals[1]) {
-			validWinner = "B"
-		}
-		if verdict.Winner != validWinner {
-			return Verdict{}, errors.New("judge selected an inapplicable patch over an applicable patch")
-		}
-	}
-	return verdict, nil
+	return s.judgeWithEvidence(ctx, job, proposals)
 }
 
 func truncateForJudge(value string) string {

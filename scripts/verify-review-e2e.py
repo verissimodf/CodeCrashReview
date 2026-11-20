@@ -58,6 +58,7 @@ while True:
         selected = detail['proposals'] if winner == 'TIE' else [p for p in detail['proposals'] if p['slot']==winner]
         assert selected and all(p['verification']['proof']['passed'] for p in selected)
         assert detail['verdict']['scores']
+        assert detail['evaluation_attempts'] and detail['evaluation_attempts'][-1]['error'] == ''
         print('functional_proof_and_persisted_verdict_confirmed winner='+winner,flush=True)
         break
     time.sleep(5)
