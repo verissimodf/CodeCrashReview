@@ -20,12 +20,15 @@ import (
 	"codecrashreview/backend/internal/database"
 	"codecrashreview/backend/internal/leaderboard"
 	"codecrashreview/backend/internal/matchmaking"
+	"codecrashreview/backend/internal/reviews"
 	"codecrashreview/backend/internal/snippets"
 	"codecrashreview/backend/internal/websocket"
 	"codecrashreview/backend/pkg/ratelimit"
 )
 
 func main() {
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
 	// Load configuration
 	cfg := config.Load()
 
@@ -64,6 +67,7 @@ func main() {
 	challengeService := challenges.NewService(challengeRepo, templateRepo, db)
 	snippetService := snippets.NewService(snippetRepo, collectionRepo, db)
 	leaderboardService := leaderboard.NewService(db)
+	reviewService := reviews.NewService(db, cfg)
 	wsHub := websocket.NewHub(redisClient, logger)
 
 	// Set dependencies
@@ -75,6 +79,7 @@ func main() {
 
 	// Start matchmaking worker
 	go matchmakingService.StartWorker(context.Background())
+	reviewService.Start(appCtx)
 
 	// Start leaderboard cache updater
 
@@ -92,7 +97,7 @@ func main() {
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "timestamp": time.Now().Unix()})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "0.2.0", "timestamp": time.Now().Unix()})
 	})
 
 	router.GET("/ready", func(c *gin.Context) {
@@ -116,6 +121,7 @@ func main() {
 			authService.RegisterProtected(protected)
 			matchmakingService.RegisterRoutes(protected)
 			arena.Register(protected, db)
+			reviewService.Register(protected)
 			// Challenge routes
 			challengeService.RegisterRoutes(protected)
 
@@ -147,6 +153,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	appCancel()
 
 	logger.Info().Msg("Shutting down server...")
 

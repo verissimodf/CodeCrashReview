@@ -29,13 +29,14 @@ type ChatMessage struct {
 }
 
 type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
-	Tools       []Tool        `json:"tools,omitempty"`
-	ToolChoice  interface{}   `json:"tool_choice,omitempty"`
+	Model          string        `json:"model"`
+	Messages       []ChatMessage `json:"messages"`
+	Temperature    float64       `json:"temperature,omitempty"`
+	MaxTokens      int           `json:"max_tokens,omitempty"`
+	Stream         bool          `json:"stream,omitempty"`
+	Tools          []Tool        `json:"tools,omitempty"`
+	ToolChoice     interface{}   `json:"tool_choice,omitempty"`
+	ResponseFormat interface{}   `json:"response_format,omitempty"`
 }
 
 type Tool struct {
@@ -88,7 +89,8 @@ func NewClient(baseURL, apiKey string) *Client {
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout:   120 * time.Second,
+			// The caller owns cancellation; model latency is not a quality gate.
+			Timeout:   0,
 			Transport: transport,
 		},
 		logger: zerolog.Nop(),

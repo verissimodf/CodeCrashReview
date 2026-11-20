@@ -1,7 +1,7 @@
 # Backend Dockerfile - Multi-stage build
 
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26.11-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make gcc musl-dev
@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server ./cmd/api
 
 # Development stage
-FROM golang:1.25-alpine AS development
+FROM golang:1.26.11-alpine AS development
 
 RUN apk add --no-cache git make gcc musl-dev air
 
@@ -38,10 +38,10 @@ EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
 # Production stage
-FROM alpine:3.19 AS production
+FROM alpine:3.23 AS production
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates git tzdata
 
 # Create non-root user
 RUN adduser -D -u 1000 -s /bin/sh appuser

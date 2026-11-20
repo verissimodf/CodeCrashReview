@@ -18,7 +18,9 @@ import type {
 	LeaderboardEntry,
 	UserStats,
 	Challenge,
+	ChallengeCategory,
 	Snippet,
+	SnippetCollection,
 	Notification,
 	Toast,
 	UIState,
@@ -529,8 +531,8 @@ function createLeaderboardStore() {
 				const newState = { ...state, loading: false, lastUpdated: Date.now() };
 				if (type === 'global') newState.global = data.data;
 				else if (type === 'weekly') newState.weekly = data.data;
-				else if (type === 'language' && params.language) newState.byLanguage[params.language] = data.data;
-				else if (type === 'agent' && params.agent) newState.byAgent[params.agent] = data.data;
+				else if (type === 'language' && params?.language) newState.byLanguage[params.language] = data.data;
+				else if (type === 'agent' && params?.agent) newState.byAgent[params.agent] = data.data;
 				return newState;
 			});
 		} catch (error) {
@@ -817,12 +819,16 @@ export const ui = createUIStore();
 
 interface ConfigState {
 	config: AppConfig | null;
+	api_url: string;
+	ws_url: string;
 	loading: boolean;
 }
 
 function createConfigStore() {
 	const { subscribe, set, update } = writable<ConfigState>({
 		config: null,
+		api_url: '/api',
+		ws_url: `${browser ? location.protocol === 'https:' ? 'wss:' : 'ws:' : 'ws:'}//${browser ? location.host : 'localhost'}/ws`,
 		loading: true
 	});
 
@@ -832,10 +838,10 @@ function createConfigStore() {
 			const response = await fetch('/api/config');
 			if (!response.ok) throw new Error('Failed to load config');
 			const config = await response.json();
-			set({ config, loading: false });
+			set({ config, api_url: config.api_url || '/api', ws_url: config.ws_url || '/ws', loading: false });
 		} catch (error) {
 			console.error('Failed to load config:', error);
-			set({ config: null, loading: false });
+			set({ config: null, api_url: '/api', ws_url: '/ws', loading: false });
 		}
 	}
 

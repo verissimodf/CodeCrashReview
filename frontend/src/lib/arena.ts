@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { auth } from '$lib/stores';
+import { auth } from '$lib/auth';
 
 export interface ArenaChallenge {
     id: string;

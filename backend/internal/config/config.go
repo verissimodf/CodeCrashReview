@@ -61,6 +61,13 @@ type Config struct {
 	EnableChallengeTemplates bool
 	EnableSnippetImport      bool
 	EnableAgentAnalytics     bool
+
+	// Repository review pipeline
+	ReviewWorkspaceRoot string
+	ReviewLocalRoots    string
+	ReviewMaxFiles      int
+	ReviewMaxBytes      int
+	ReviewTimeout       time.Duration
 }
 
 func Load() *Config {
@@ -108,6 +115,15 @@ func Load() *Config {
 	viper.SetDefault("enable_challenge_templates", true)
 	viper.SetDefault("enable_snippet_import", true)
 	viper.SetDefault("enable_agent_analytics", true)
+	viper.SetDefault("review_workspace_root", "/var/lib/codecrashreview/reviews")
+	viper.SetDefault("review_local_roots", "/repositories")
+	viper.SetDefault("review_max_files", 20)
+	// Keep the repository excerpt and structured answer inside the 4K-token
+	// context exposed by the default local coding model.
+	viper.SetDefault("review_max_bytes", 6144)
+	// Zero disables an overall wall-clock deadline. Individual I/O calls remain
+	// bounded and the worker lease is renewed while proof work continues.
+	viper.SetDefault("review_timeout", "0")
 
 	_ = viper.ReadInConfig()
 
@@ -149,6 +165,11 @@ func Load() *Config {
 		EnableChallengeTemplates: getEnvBool("ENABLE_CHALLENGE_TEMPLATES", viper.GetBool("enable_challenge_templates")),
 		EnableSnippetImport:      getEnvBool("ENABLE_SNIPPET_IMPORT", viper.GetBool("enable_snippet_import")),
 		EnableAgentAnalytics:     getEnvBool("ENABLE_AGENT_ANALYTICS", viper.GetBool("enable_agent_analytics")),
+		ReviewWorkspaceRoot:      getEnv("REVIEW_WORKSPACE_ROOT", viper.GetString("review_workspace_root")),
+		ReviewLocalRoots:         getEnv("REVIEW_LOCAL_ROOTS", viper.GetString("review_local_roots")),
+		ReviewMaxFiles:           getEnvInt("REVIEW_MAX_FILES", viper.GetInt("review_max_files")),
+		ReviewMaxBytes:           getEnvInt("REVIEW_MAX_BYTES", viper.GetInt("review_max_bytes")),
+		ReviewTimeout:            parseDuration(getEnv("REVIEW_TIMEOUT", viper.GetString("review_timeout"))),
 	}
 
 	return cfg

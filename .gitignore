@@ -127,3 +127,4 @@ loki_data/
 # Misc
 *.orig
 *.rej
+artifacts/

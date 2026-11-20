@@ -2,10 +2,9 @@
     import '../site.css';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { auth } from '$lib/stores';
+    import { auth } from '$lib/auth';
     const navigation = [
-        ['/', 'Início'], ['/arena','Arena'], ['/challenges','Desafios'], ['/leaderboard','Ranking'],
-        ['/snippets','Snippets'], ['/profile','Perfil']
+        ['/', 'Início'], ['/arena','Revisões IA']
     ] as const;
     function logout() { auth.clearAuth(); goto('/auth/login'); }
 </script>
