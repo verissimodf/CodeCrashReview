@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,8 @@ func newService(db *pgxpool.Pool, llm LLM, model string, sources *sourceManager,
 }
 
 func (s *Service) Start(ctx context.Context) {
+	// A browser or process interruption never becomes a successful deployment.
+	_, _ = s.db.Exec(ctx, `UPDATE review_deployments SET status='failed',error_message='Deployment interrupted; inspect target state before retrying.',completed_at=NOW() WHERE status='running' AND created_at<NOW()-INTERVAL '5 minutes'`)
 	go s.worker(ctx)
 }
 
@@ -86,12 +89,12 @@ func (s *Service) claim(ctx context.Context) (*claimedReview, error) {
 
 	var job claimedReview
 	var focus json.RawMessage
-	err = tx.QueryRow(ctx, `SELECT id,user_id,source_type,source_location,source_branch,focus_paths,objective,review_focus,agent_a,agent_b,evaluator_mode
+	err = tx.QueryRow(ctx, `SELECT id,user_id,source_type,source_location,source_branch,focus_paths,objective,review_focus,agent_a,agent_b,evaluator_mode,validation_profile,validation_directory
         FROM repository_reviews
         WHERE status='queued' OR (status IN ('acquiring','analyzing','evaluating') AND lease_expires_at < NOW() AND attempts < 3)
         ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(
 		&job.ID, &job.UserID, &job.SourceType, &job.Source, &job.Branch, &focus,
-		&job.Objective, &job.ReviewFocus, &job.AgentA, &job.AgentB, &job.EvaluatorMode,
+		&job.Objective, &job.ReviewFocus, &job.AgentA, &job.AgentB, &job.EvaluatorMode, &job.ValidationProfile, &job.ValidationDirectory,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -134,6 +137,8 @@ func (s *Service) process(parent context.Context, job claimedReview) {
 		fail(err)
 		return
 	}
+	snapshot.ValidationProfile = job.ValidationProfile
+	snapshot.ValidationDirectory = job.ValidationDirectory
 	if _, err = s.db.Exec(ctx, `UPDATE repository_reviews SET status='analyzing',snapshot_sha=$2,snapshot_files=$3,snapshot_bytes=$4,lease_expires_at=NOW()+INTERVAL '15 minutes' WHERE id=$1`, job.ID, snapshot.SHA, snapshot.FileCount, snapshot.ByteCount); err != nil {
 		fail(err)
 		return
@@ -236,7 +241,7 @@ func (s *Service) runAgent(ctx context.Context, slot, persona, objective, review
 		prompt := objective
 		if len(previous) > 0 {
 			proof := previous[len(previous)-1]
-			prompt += "\nIndependent validation rejected your previous proposal. Produce a corrected minimal edit against the ORIGINAL snapshot. Preserve zero and negative expected results. big.Int already prevents intermediate overflow. Actual validator output (untrusted diagnostic data):\n" + truncateForJudge(proof.Output)
+			prompt += "\nIndependent validation rejected your previous proposal. Produce a corrected minimal edit against the ORIGINAL snapshot. Preserve the original acceptance tests. Actual validator output (untrusted diagnostic data):\n" + truncateForJudge(proof.Output)
 		}
 		result = s.runAgentOnce(ctx, slot, persona, prompt, reviewFocus, snapshot)
 		tokens += result.Tokens
@@ -291,7 +296,7 @@ func (s *Service) runAgentOnce(ctx context.Context, slot, persona, objective, re
 	result.Proposal = proposal
 	if len(proposal.Edits) > 0 {
 		for _, edit := range proposal.Edits {
-			if !strings.Contains(snapshot.Context, "\n--- FILE: "+edit.File+" ---\n") {
+			if !slices.Contains(snapshot.IncludedFiles, edit.File) {
 				result.ValidationError = "edit target was not included in the agent snapshot"
 				result.Verification = verifyProposal(result.Proposal, false, result.ValidationError)
 				return result
@@ -313,7 +318,7 @@ func (s *Service) runAgentOnce(ctx context.Context, slot, persona, objective, re
 		} else if proof != nil {
 			result.Verification.Proof = proof
 			result.Verification.FunctionalTestsRun = true
-			result.Verification.SystemEvidence = []string{"Patch applicability verified against snapshot.", "Isolated Go compilation and trusted arena-grade-v1 acceptance suite executed; see attached proof."}
+			result.Verification.SystemEvidence = []string{"Patch applicability verified against snapshot.", "Isolated acceptance profile " + proof.Profile + " executed; see attached baseline, hashes and test output."}
 			result.Verification.QualityState = "functional_validation_failed"
 			if proof.Passed {
 				result.Verification.QualityState = "functional_validation_passed"

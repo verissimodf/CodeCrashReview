@@ -11,6 +11,8 @@
     let objective = 'Revisar o repositório e propor a correção mais importante considerando segurança, correção, confiabilidade, disponibilidade, manutenibilidade e eficiência.';
     let focusPaths = '';
     let reviewFocus = 'comprehensive';
+    let validationProfile = 'go-test-v1';
+    let validationDirectory = '.';
     let agentA = 'sentinel';
     let agentB = 'refactor';
     let evaluatorMode: 'ai'|'human' = 'ai';
@@ -43,6 +45,7 @@
             const result = await reviewRequest<{id:string}>('', {
                 source_type: sourceType, source, branch, objective, review_focus: reviewFocus, agent_a: agentA, agent_b: agentB,
                 evaluator_mode: evaluatorMode,
+                validation_profile: validationProfile, validation_directory: validationDirectory,
                 focus_paths: focusPaths.split(/[\n,]/).map(value => value.trim()).filter(Boolean)
             });
             await goto('/arena/' + result.id);
@@ -53,14 +56,20 @@
 </script>
 
 <svelte:head><title>Revisão autônoma · CodeCrashReview</title></svelte:head>
-<h1>Revisão concorrente de repositórios</h1>
+<h1>Revisões de código</h1>
 <p>Dois agentes analisam o mesmo snapshot de forma independente. Um terceiro agente ou você escolhe a melhor proposta.</p>
 
 {#if !$auth.isAuthenticated}
     <section class="panel"><p><a href="/auth/login">Entre na sua conta</a> para iniciar uma revisão.</p></section>
 {:else}
     {#if error}<p role="alert">{error}</p>{/if}
-    <section class="panel">
+    <section class="panel workspace-list">
+        <div class="row"><h2>Suas revisões</h2><button on:click={load} disabled={busy}>Atualizar</button></div>
+        {#each reviews as review}
+            <a class="entry" href={'/arena/' + review.id}><strong>{review.source_location}</strong><span>{review.review_focus} · {review.agent_a} × {review.agent_b} · {reviewStatus[review.status] || review.status}</span></a>
+        {:else}<div class="empty-state"><h3>Sua primeira revisão começa aqui.</h3><p>Indique um repositório, defina o objetivo e escolha dois especialistas. As propostas e suas provas ficarão reunidas nesta área.</p><a href="#new-review">Configurar uma revisão</a></div>{/each}
+    </section>
+    <section class="panel" id="new-review">
         <h2>Nova revisão</h2>
         <form on:submit|preventDefault={create}>
             <div class="row">
@@ -74,7 +83,9 @@
             <label>Objetivo<textarea bind:value={objective} rows="5" maxlength="4000" required></textarea></label>
             <label>Especialidade da tarefa<select bind:value={reviewFocus}>{#each focusOptions as option}<option value={option[0]}>{option[1]}</option>{/each}</select></label>
             <p>Os perfis são filtrados pela especialidade da tarefa. Atualmente usam o mesmo modelo, com instruções independentes; essa seleção não equivale a uma certificação de competência.</p>
-            <p>Aprovação automática exige testes independentes. Nesta versão, o perfil executável cobre o avaliador de pontuação; outros componentes ficam pendentes de validação.</p>
+            <label>Testes de aceitação<select bind:value={validationProfile}><option value="go-test-v1">Go — testes do projeto</option><option value="python-unittest-v1">Python — unittest</option><option value="node-test-v1">JavaScript — testes do Node</option><option value="arena-grade-v1">Avaliador de pontuação da arena</option></select></label>
+            <label>Diretório dos testes<input bind:value={validationDirectory} required placeholder=". ou backend" /></label>
+            <p>Os testes originais serão preservados e executados antes e depois da correção. Uma proposta sem testes aprovados não pode ser publicada.</p>
             <label>Foco opcional — caminhos relativos separados por vírgula ou linha<textarea bind:value={focusPaths} rows="3" placeholder="backend/internal/auth, frontend/src"></textarea></label>
             <div class="row">
                 <label>Agente A<select bind:value={agentA}>{#each compatiblePersonas as p}<option value={p}>{p}</option>{/each}</select></label>
@@ -85,10 +96,5 @@
             {#if agentA === agentB}<p role="alert">Escolha agentes diferentes.</p>{/if}
         </form>
     </section>
-    <section class="panel">
-        <div class="row"><h2>Revisões</h2><button on:click={load} disabled={busy}>Atualizar</button></div>
-        {#each reviews as review}
-            <a class="entry" href={'/arena/' + review.id}><strong>{review.source_location}</strong><span>{review.review_focus} · {review.agent_a} × {review.agent_b} · {reviewStatus[review.status] || review.status}</span></a>
-        {:else}<p>Nenhuma revisão iniciada.</p>{/each}
-    </section>
+
 {/if}

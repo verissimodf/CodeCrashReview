@@ -27,10 +27,14 @@ test('public interface, real login, persisted proof and downloadable correction'
         const selected = review.proposals.find((p: {slot:string}) => p.slot === review.verdict.winner);
         expect(readFileSync(path, 'utf8').trim()).toBe(selected.patch.trim());
     }
+    await page.evaluate(() => window.scrollTo(0,0));
     await page.screenshot({path:'../artifacts/validation/review-desktop.png', fullPage:true});
+    await page.screenshot({path:'../artifacts/validation/review-viewport.png'});
     await page.setViewportSize({width:390,height:844});
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.evaluate(() => window.scrollTo(0,0));
     await page.screenshot({path:'../artifacts/validation/review-mobile.png', fullPage:true});
+    await page.screenshot({path:'../artifacts/validation/review-mobile-viewport.png'});
     await page.getByRole('button', {name:/Sair/}).click();
     await expect(page).toHaveURL(/\/auth\/login$/);
     expect(errors).toEqual([]);

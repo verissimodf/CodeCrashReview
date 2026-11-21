@@ -6,11 +6,15 @@ services:
       dockerfile: deploy/validator/Dockerfile
     environment:
       VALIDATOR_HOST_ROOT: ${HOME}/.local/share/codecrashreview/validator-jobs
+      DEPLOY_TARGETS_FILE: /config/deploy-targets.json
       VALIDATOR_IMAGE: ${VALIDATOR_IMAGE:?Set immutable Go validator image digest}
+      VALIDATOR_PYTHON_IMAGE: ${VALIDATOR_PYTHON_IMAGE:-}
+      VALIDATOR_NODE_IMAGE: ${VALIDATOR_NODE_IMAGE:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${HOME}/.local/share/codecrashreview/validator-jobs:/jobs
       - validator-socket:/socket
+      - ${HOME}/.local/share/codecrashreview/deploy-targets.json:/config/deploy-targets.json:ro
     network_mode: none
     read_only: true
     tmpfs: [/tmp]
@@ -71,6 +75,8 @@ services:
       REVIEW_MAX_FILES: ${REVIEW_MAX_FILES:-20}
       REVIEW_MAX_BYTES: ${REVIEW_MAX_BYTES:-6144}
       REVIEW_TIMEOUT: ${REVIEW_TIMEOUT:-0}
+      REVIEW_OPERATOR_IDS: ${REVIEW_OPERATOR_IDS:-}
+      DEPLOY_TARGETS_FILE: /config/deploy-targets.json
       REVIEW_VALIDATOR_SOCKET: /run/validator/validator.sock
       GIN_MODE: release
     volumes:
@@ -78,6 +84,7 @@ services:
       - ${HOME}/.local/share/codecrashreview/reviews:/var/lib/codecrashreview/reviews
       - /opt/laytech-ai/repositories:/repositories:ro
       - validator-socket:/run/validator:ro
+      - ${HOME}/.local/share/codecrashreview/deploy-targets.json:/config/deploy-targets.json:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

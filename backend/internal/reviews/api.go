@@ -34,8 +34,13 @@ func (s *Service) Register(protected *gin.RouterGroup) {
 	g := protected.Group("/reviews")
 	g.POST("", s.createHTTP)
 	g.GET("", s.listHTTP)
+	g.GET("/deployment-targets", s.targetsHTTP)
 	g.GET("/:id", s.getHTTP)
 	g.POST("/:id/verdict", s.verdictHTTP)
+	g.POST("/:id/publish", s.publishHTTP)
+	g.POST("/:id/deploy", s.deployHTTP)
+	g.GET("/:id/deployments", s.deploymentsHTTP)
+	g.GET("/:id/publications", s.publicationsHTTP)
 }
 
 func currentUser(c *gin.Context) (uuid.UUID, bool) {
@@ -123,6 +128,12 @@ func (s *Service) verdictHTTP(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Provide a rationale between 10 and 4000 characters."})
 		return
 	}
+	checked, scoreErr := parseVerdict(string(rawJSON(Verdict{Winner: req.Winner, Rationale: req.Rationale, Scores: req.Scores})))
+	if scoreErr != nil {
+		c.JSON(400, gin.H{"error": scoreErr.Error()})
+		return
+	}
+	req.Scores = checked.Scores
 	if err = s.HumanVerdict(c.Request.Context(), user, id, req); errors.Is(err, pgx.ErrNoRows) {
 		c.JSON(http.StatusConflict, gin.H{"error": "This review is not awaiting your verdict."})
 		return
@@ -139,6 +150,18 @@ func (s *Service) verdictHTTP(c *gin.Context) {
 }
 
 func validateCreateRequest(req *CreateRequest) error {
+	if req.ValidationProfile == "" {
+		req.ValidationProfile = "arena-grade-v1"
+	}
+	if !map[string]bool{"arena-grade-v1": true, "go-test-v1": true, "python-unittest-v1": true, "node-test-v1": true}[req.ValidationProfile] {
+		return errors.New("unsupported validation profile")
+	}
+	if req.ValidationDirectory == "" {
+		req.ValidationDirectory = "."
+	}
+	if strings.Contains(req.ValidationDirectory, "\\") || filepath.IsAbs(req.ValidationDirectory) || filepath.Clean(req.ValidationDirectory) != req.ValidationDirectory || req.ValidationDirectory == ".." || strings.HasPrefix(req.ValidationDirectory, "../") {
+		return errors.New("invalid validation directory")
+	}
 	req.SourceType = strings.ToLower(strings.TrimSpace(req.SourceType))
 	req.Source = strings.TrimSpace(req.Source)
 	req.Branch = strings.TrimSpace(req.Branch)
@@ -201,8 +224,8 @@ func validateCreateRequest(req *CreateRequest) error {
 
 func (s *Service) Create(ctx context.Context, user uuid.UUID, req CreateRequest) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := s.db.QueryRow(ctx, `INSERT INTO repository_reviews(user_id,source_type,source_location,source_branch,focus_paths,objective,review_focus,agent_a,agent_b,evaluator_mode)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, user, req.SourceType, req.Source, req.Branch, rawJSON(req.FocusPaths), req.Objective, req.ReviewFocus, req.AgentA, req.AgentB, req.EvaluatorMode).Scan(&id)
+	err := s.db.QueryRow(ctx, `INSERT INTO repository_reviews(user_id,source_type,source_location,source_branch,focus_paths,objective,review_focus,agent_a,agent_b,evaluator_mode,validation_profile,validation_directory)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, user, req.SourceType, req.Source, req.Branch, rawJSON(req.FocusPaths), req.Objective, req.ReviewFocus, req.AgentA, req.AgentB, req.EvaluatorMode, req.ValidationProfile, req.ValidationDirectory).Scan(&id)
 	if err == nil {
 		s.notify()
 	}
@@ -243,9 +266,13 @@ func (s *Service) HumanVerdict(ctx context.Context, user, id uuid.UUID, req Huma
 		return err
 	}
 	verdict := Verdict{Winner: req.Winner, Rationale: strings.TrimSpace(req.Rationale), Scores: req.Scores}
-	if req.Winner != "TIE" {
+	slots := []string{req.Winner}
+	if req.Winner == "TIE" {
+		slots = []string{"A", "B"}
+	}
+	for _, slot := range slots {
 		var approved bool
-		err = tx.QueryRow(ctx, `SELECT patch_valid AND COALESCE((verification->'proof'->>'passed')::boolean,FALSE) FROM review_proposals WHERE review_id=$1 AND slot=$2`, id, req.Winner).Scan(&approved)
+		err = tx.QueryRow(ctx, `SELECT patch_valid AND COALESCE((verification->'proof'->>'passed')::boolean,FALSE) FROM review_proposals WHERE review_id=$1 AND slot=$2`, id, slot).Scan(&approved)
 		if err != nil {
 			return err
 		}

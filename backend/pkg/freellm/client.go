@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -117,13 +118,23 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if len(body) > 4*1024*1024 {
+		return nil, fmt.Errorf("inference response exceeds size limit")
+	}
+	if resp.StatusCode == http.StatusBadRequest && req.MaxTokens > 0 && strings.Contains(string(body), "cannot represent Chat control max_output_tokens") {
+		// FreeLLM adapters may reject this optional control. Retry once without it;
+		// preserve the selected model, messages and caller-owned cancellation.
+		compatible := *req
+		compatible.MaxTokens = 0
+		return c.ChatCompletion(ctx, &compatible)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("inference provider returned HTTP %d", resp.StatusCode)
 	}
 
 	var chatResp ChatResponse

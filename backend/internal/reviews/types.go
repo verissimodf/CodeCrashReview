@@ -19,15 +19,17 @@ type LLM interface {
 }
 
 type CreateRequest struct {
-	SourceType    string   `json:"source_type"`
-	Source        string   `json:"source"`
-	Branch        string   `json:"branch"`
-	FocusPaths    []string `json:"focus_paths"`
-	Objective     string   `json:"objective"`
-	ReviewFocus   string   `json:"review_focus"`
-	AgentA        string   `json:"agent_a"`
-	AgentB        string   `json:"agent_b"`
-	EvaluatorMode string   `json:"evaluator_mode"`
+	ValidationProfile   string   `json:"validation_profile"`
+	ValidationDirectory string   `json:"validation_directory"`
+	SourceType          string   `json:"source_type"`
+	Source              string   `json:"source"`
+	Branch              string   `json:"branch"`
+	FocusPaths          []string `json:"focus_paths"`
+	Objective           string   `json:"objective"`
+	ReviewFocus         string   `json:"review_focus"`
+	AgentA              string   `json:"agent_a"`
+	AgentB              string   `json:"agent_b"`
+	EvaluatorMode       string   `json:"evaluator_mode"`
 }
 
 type HumanVerdictRequest struct {
@@ -37,17 +39,19 @@ type HumanVerdictRequest struct {
 }
 
 type claimedReview struct {
-	ID            uuid.UUID
-	UserID        uuid.UUID
-	SourceType    string
-	Source        string
-	Branch        string
-	FocusPaths    []string
-	Objective     string
-	ReviewFocus   string
-	AgentA        string
-	AgentB        string
-	EvaluatorMode string
+	ValidationProfile   string
+	ValidationDirectory string
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	SourceType          string
+	Source              string
+	Branch              string
+	FocusPaths          []string
+	Objective           string
+	ReviewFocus         string
+	AgentA              string
+	AgentB              string
+	EvaluatorMode       string
 }
 
 type Finding struct {
@@ -112,13 +116,25 @@ type Verification struct {
 }
 
 type FunctionalProof struct {
-	Profile      string `json:"profile"`
-	Passed       bool   `json:"passed"`
-	ExitCode     int    `json:"exit_code"`
-	SourceSHA256 string `json:"source_sha256"`
-	TestsSHA256  string `json:"tests_sha256"`
-	Image        string `json:"image"`
-	Output       string `json:"output"`
+	Baseline       *TestExecution `json:"baseline,omitempty"`
+	BaselineSHA256 string         `json:"baseline_sha256,omitempty"`
+	TestsPreserved bool           `json:"tests_preserved,omitempty"`
+	TestCount      int            `json:"test_count,omitempty"`
+	Profile        string         `json:"profile"`
+	Passed         bool           `json:"passed"`
+	ExitCode       int            `json:"exit_code"`
+	SourceSHA256   string         `json:"source_sha256"`
+	TestsSHA256    string         `json:"tests_sha256"`
+	Image          string         `json:"image"`
+	Output         string         `json:"output"`
+}
+
+type TestExecution struct {
+	Passed    bool   `json:"passed"`
+	ExitCode  int    `json:"exit_code"`
+	TestCount int    `json:"test_count"`
+	Output    string `json:"output"`
+	Image     string `json:"image"`
 }
 
 type Verdict struct {
@@ -128,11 +144,14 @@ type Verdict struct {
 }
 
 type Snapshot struct {
-	Dir       string
-	SHA       string
-	Context   string
-	FileCount int
-	ByteCount int64
+	IncludedFiles       []string
+	ValidationProfile   string
+	ValidationDirectory string
+	Dir                 string
+	SHA                 string
+	Context             string
+	FileCount           int
+	ByteCount           int64
 }
 
 func rawJSON(value any) json.RawMessage {

@@ -87,14 +87,15 @@ func (m *sourceManager) acquire(ctx context.Context, job claimedReview) (Snapsho
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("read snapshot revision: %w", err)
 	}
-	contextText, files, bytesRead, err := m.buildContext(destination, job.FocusPaths)
+	contextText, included, bytesRead, err := m.buildSnapshotContext(destination, job.FocusPaths)
+	files := len(included)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	if files == 0 {
 		return Snapshot{}, errors.New("repository snapshot contains no reviewable text files")
 	}
-	return Snapshot{Dir: destination, SHA: strings.TrimSpace(sha), Context: contextText, FileCount: files, ByteCount: bytesRead}, nil
+	return Snapshot{Dir: destination, SHA: strings.TrimSpace(sha), Context: contextText, IncludedFiles: included, FileCount: files, ByteCount: bytesRead}, nil
 }
 
 func validateGitHubURL(raw string) (string, error) {
@@ -143,6 +144,11 @@ func (m *sourceManager) validateLocalPath(raw string) (string, error) {
 }
 
 func (m *sourceManager) buildContext(root string, focus []string) (string, int, int64, error) {
+	text, files, size, err := m.buildSnapshotContext(root, focus)
+	return text, len(files), size, err
+}
+
+func (m *sourceManager) buildSnapshotContext(root string, focus []string) (string, []string, int64, error) {
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -169,13 +175,14 @@ func (m *sourceManager) buildContext(root string, focus []string) (string, int, 
 		return nil
 	})
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("enumerate repository: %w", err)
+		return "", nil, 0, fmt.Errorf("enumerate repository: %w", err)
 	}
 	sort.Slice(paths, func(i, j int) bool { return pathPriority(paths[i]) < pathPriority(paths[j]) })
 
 	var out strings.Builder
 	var total int64
 	count := 0
+	var included []string
 	for _, rel := range paths {
 		if count >= m.maxFiles || total >= int64(m.maxBytes) {
 			break
@@ -192,8 +199,9 @@ func (m *sourceManager) buildContext(root string, focus []string) (string, int, 
 		fmt.Fprintf(&out, "\n--- FILE: %s ---\n%s\n--- END FILE ---\n", filepath.ToSlash(rel), content)
 		total += int64(len(data))
 		count++
+		included = append(included, filepath.ToSlash(rel))
 	}
-	return out.String(), count, total, nil
+	return out.String(), included, total, nil
 }
 
 func sensitiveFile(name string) bool {

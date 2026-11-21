@@ -97,7 +97,7 @@ func main() {
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "0.2.0", "timestamp": time.Now().Unix()})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "0.3.0", "timestamp": time.Now().Unix()})
 	})
 
 	router.GET("/ready", func(c *gin.Context) {

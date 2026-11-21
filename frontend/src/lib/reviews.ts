@@ -19,7 +19,7 @@ export interface ReviewDelivery {
     final_objective: string; methodology: string[]; effectiveness_evidence: string[]; executed_steps: string[];
 }
 export interface ProposalVerification {
-    proof?: {profile: string; passed: boolean; exit_code: number; source_sha256: string; tests_sha256: string; image: string; output: string};
+    proof?: {profile: string; passed: boolean; exit_code: number; source_sha256: string; tests_sha256: string; image: string; output: string; test_count?:number; tests_preserved?:boolean; baseline?:{passed:boolean; exit_code:number; output:string; test_count:number}};
     patch_applicable: boolean; exact_edits_verified: boolean; functional_tests_run: boolean;
     quality_state: string; system_evidence: string[]; unsupported_claims: string[];
 }

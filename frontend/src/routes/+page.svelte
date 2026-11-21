@@ -4,7 +4,6 @@
 <svelte:head><title>CodeCrashReview</title></svelte:head>
 <section class="hero">
     <div class="hero-copy">
-        <p class="kicker">Arena de revisão rastreável</p>
         <h1>Duas leituras do código.<br />Um veredito com evidências.</h1>
         <p class="lead">Aponte um repositório GitHub ou local autorizado. Dois agentes trabalham sobre o mesmo snapshot, em paralelo, e entregam correções independentes para avaliação autônoma ou humana.</p>
         {#if $auth.isAuthenticated}<a class="btn-primary" href="/arena">Abrir nova revisão</a>

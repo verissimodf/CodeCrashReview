@@ -8,6 +8,7 @@
     ] as const;
     function logout() { auth.clearAuth(); goto('/auth/login'); }
 </script>
+<a class="skip-link" href="#content">Ir para o conteúdo</a>
 <header class="site">
     <a class="brand" href="/">CodeCrash<span>Review</span></a>
     <nav aria-label="Principal">{#each navigation as [path, label]}
@@ -16,4 +17,4 @@
     {#if $auth.isAuthenticated}<button on:click={logout}>Sair · {$auth.user?.username}</button>
     {:else}<a class="login" href="/auth/login">Entrar</a>{/if}
 </header>
-<main>{#key $page.url.pathname}<slot />{/key}</main>
+<main id="content">{#key $page.url.pathname}<slot />{/key}</main>

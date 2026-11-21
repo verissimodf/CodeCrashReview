@@ -16,7 +16,7 @@ type judgeSequence struct {
 func (f *judgeSequence) ChatCompletion(_ context.Context, req *freellm.ChatRequest) (*freellm.ChatResponse, error) {
 	f.calls++
 	f.lastPayload = req.Messages[1].Content
-	winner := "B"
+	winner := "TIE"
 	if f.calls == 1 {
 		winner = "proposal B"
 	}
@@ -30,7 +30,7 @@ func TestJudgeRetriesMalformedWinnerAndBoundsContext(t *testing.T) {
 	service := &Service{llm: fake, model: "fixture"}
 	p := proposalResult{PatchValid: true, Proposal: Proposal{Summary: strings.Repeat("summary", 1000), Patch: strings.Repeat("patch", 1000)}, Verification: Verification{Proof: &FunctionalProof{Passed: true, Output: strings.Repeat("logs", 10000)}}}
 	verdict, err := service.evaluate(context.Background(), claimedReview{Objective: strings.Repeat("objective", 1000)}, []proposalResult{p, p})
-	if err != nil || verdict.Winner != "B" || fake.calls != 2 {
+	if err != nil || verdict.Winner != "TIE" || fake.calls != 2 {
 		t.Fatalf("verdict=%+v calls=%d err=%v", verdict, fake.calls, err)
 	}
 	if len(fake.lastPayload) > 7000 || strings.Contains(fake.lastPayload, "logslogs") {

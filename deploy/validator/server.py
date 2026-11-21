@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 import uuid
 import threading
+import project
+import deployment
 
 ROOT = pathlib.Path('/jobs')
 HOST_ROOT = os.environ['VALIDATOR_HOST_ROOT']
@@ -20,14 +22,28 @@ TESTS = pathlib.Path('/validator/grade_test.go').read_bytes()
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != '/validate':
+        if self.path not in ('/validate','/deploy'):
             self.send_error(404)
             return
         try:
             size = int(self.headers.get('Content-Length', '0'))
-            if not 0 < size <= 131072:
+            if not 0 < size <= 30*1024*1024:
                 raise ValueError('invalid request size')
             data = json.loads(self.rfile.read(size))
+            if not isinstance(data,dict):
+                raise ValueError('request must be an object')
+            if self.path == '/deploy':
+                self.reply(deployment.deploy(data))
+                return
+            if data.get('profile') in project.PROFILES:
+                job = pathlib.Path(tempfile.mkdtemp(prefix='project-',dir=ROOT))
+                job.chmod(0o755)
+                try:
+                    result = project.validate(data,job,HOST_ROOT+'/'+job.name)
+                    self.reply(result)
+                finally:
+                    shutil.rmtree(job)
+                return
             if data.get('profile') != 'arena-grade-v1' or not isinstance(data.get('source'), str):
                 raise ValueError('unsupported validation profile')
             source = data['source'].encode()
@@ -77,18 +93,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                       'exit_code': code, 'source_sha256': hashlib.sha256(source).hexdigest(),
                       'tests_sha256': hashlib.sha256(TESTS).hexdigest(), 'image': IMAGE,
                       'output': log}
-            payload = json.dumps(result).encode()
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
+            self.reply(result)
         finally:
             subprocess.run(['docker', 'rm', '-f', name], capture_output=True, timeout=15)
             shutil.rmtree(directory)
 
     def log_message(self, fmt, *args):
         print(fmt % args, flush=True)
+
+    def reply(self,result):
+        payload=json.dumps(result).encode()
+        self.send_response(200)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
 
 class Server(socketserver.UnixStreamServer):

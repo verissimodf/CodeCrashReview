@@ -23,6 +23,9 @@ import (
 // This profile proves only the published arena grading contract. Other source
 // files require their own trusted acceptance profile, never model-authored tests.
 func functionalProof(ctx context.Context, snapshot Snapshot, proposal Proposal) (*FunctionalProof, error) {
+	if snapshot.ValidationProfile != "" && snapshot.ValidationProfile != "arena-grade-v1" {
+		return projectProof(ctx, snapshot, proposal)
+	}
 	const target = "backend/internal/arena/grade.go"
 	socket := os.Getenv("REVIEW_VALIDATOR_SOCKET")
 	if socket == "" {
