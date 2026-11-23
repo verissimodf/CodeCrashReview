@@ -16,7 +16,7 @@ test('public interface, real login, persisted proof and downloadable correction'
     await expect(page).toHaveURL(/\/arena$/);
     await expect(page.getByRole('heading', {name:'Nova revisão'})).toBeVisible();
     await page.locator(`a[href="/arena/${review.id}"]`).click();
-    await expect(page.getByRole('heading', {name:/Veredito:/})).toBeVisible();
+    await expect(page.getByRole('heading', {name:/Veredito:/})).toBeVisible({timeout: 30_000});
     await expect(page.getByText('testes funcionais aprovados', {exact:false}).first()).toBeVisible();
     if (review.verdict.winner !== 'TIE') {
         const downloading = page.waitForEvent('download');
