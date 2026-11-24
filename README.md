@@ -53,6 +53,28 @@ O proxy do host usa `/opt/laytech-ai/volumes/nginx/nginx.conf` e o destino `code
 
 ## Validação reproduzível
 
+### Host externo isolado
+
+Para validar fora do host de produção, use preferencialmente Linux x86_64 (Ubuntu 22.04/24.04 ou Debian 12) com Docker Engine e Compose v2. O mínimo prático é 4 vCPUs, 16 GB de RAM e 50 GB livres em SSD; para duas inferências locais simultâneas, prefira 8 vCPUs, 32 GB e 100 GB. Windows 11 também é suportado via Docker Desktop + WSL2. Não é necessário expor portas à Internet: a instalação publica somente `127.0.0.1:18080` e mantém PostgreSQL, Redis e o broker sem portas públicas.
+
+O host precisa de saída HTTPS (`443`) para clonar o repositório e baixar imagens. GPU NVIDIA não é requisito quando `FREELLM_BASE_URL` aponta para um endpoint OpenAI-compatible acessível pelo host; é opcional para executar Ollama localmente (recomenda-se 8 GB de VRAM). A validação de publicação exige, adicionalmente, um token GitHub temporário com `Contents: Read and write` no repositório de teste. O token não é gravado pelo instalador. Não são necessários SSH, RDP, Tailscale, DNS público ou acesso administrativo ao host de produção.
+
+Em Linux, a instalação completa da pilha isolada é:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/verissimodf/CodeCrashReview/Develop/scripts/install-validation.sh \
+  -o /tmp/ccr-install.sh && bash /tmp/ccr-install.sh --dir "$HOME/CodeCrashReview-validation"
+```
+
+Em Windows PowerShell (Docker Desktop + WSL2):
+
+```powershell
+irm https://raw.githubusercontent.com/verissimodf/CodeCrashReview/Develop/scripts/install-validation.ps1 -OutFile $env:TEMP\ccr-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\ccr-install.ps1
+```
+
+O comando cria um `.env.validation` privado, baixa a branch `Develop`, constrói backend/frontend/validador, aplica as migrações e confirma a página em `http://127.0.0.1:18080`. Para usar o FreeLLM já disponível no host, passe `--freellm-url http://host.docker.internal:8082/v1`; sem um endpoint de inferência, a instalação ainda comprova a infraestrutura e os testes do validador, mas não uma partida completa de IA. Para remover tudo depois da prova: `docker compose --env-file .env.validation -f compose.validation.yml down -v` dentro do diretório criado.
+
 ```sh
 cd backend
 go test -race ./...
